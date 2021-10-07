@@ -24,3 +24,8 @@ return "OID does not exist") in *node context*. Unless "Keep quierying"
 is set, stop querying unavailable OIDs. (This option is to account for 
 instances where OIDs are ephemeral.)
 
+It is possible to *get* more than one OID at a time, however, for SNMPv1, 
+a single error will cause the entire query to fail. Use separate logic:
+
+*SNMPv1* - query one OID at a time.
+*SNMPv2+* - query all OIDs at once.
