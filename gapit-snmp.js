@@ -18,6 +18,40 @@ module.exports = function (RED) {
         return sessions[sessionKey];
     }
 
+    function getGapitCodeResultsStructure(gapit_code) {
+        // Create a copy of gapit_code for storing results.
+        //
+        // Remove keys which should be runtime data, which 
+        // may be present in older JSON files.
+
+        const group_remove_keys = ["next_read"]
+        const member_remove_keys = ["value"]
+
+        // deep copy using JSON stringify/parse
+        var gapit_results = JSON.parse(JSON.stringify(gapit_code));
+
+        for (const [groups_key, groups] of Object.entries(gapit_results)) {
+            for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
+                // remove specified group keys
+                for (const group_key of group_remove_keys) {
+                    if (group_key in groups[group_idx]) {
+                        delete groups[group_idx][group_key];
+                    }
+                }
+                for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
+                    // remove specified member keys
+                    for (const member_key of member_remove_keys) {
+                        if (member_key in groups[group_idx]["group"][member_idx]) {
+                            delete groups[group_idx]["group"][member_idx][member_key];
+                        }
+                    }
+                }
+            }
+        };
+
+        return gapit_results;
+    }
+
 
     function GapitSnmpNode(config) {
         RED.nodes.createNode(this, config);
@@ -63,6 +97,9 @@ module.exports = function (RED) {
                     }
                 }
             };
+
+            // get result structure
+            var gapit_results = getGapitCodeResultsStructure(gapit_code);
 
             if (oids.length > 0) {
                 getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
@@ -121,10 +158,24 @@ module.exports = function (RED) {
                             oid_value_map[varbinds[i]["oid"]] = varbinds[i]["value"];
                         }
 
+                        // map result values into gapit_results
+                        var oids = Array()
+                        for (const [groups_key, groups] of Object.entries(gapit_results)) {
+                            for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
+                                for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
+                                    var oid = groups[group_idx]["group"][member_idx]["address"];
+                                    if (oid in oid_value_map) {
+                                        groups[group_idx]["group"][member_idx]["value"] = oid_value_map[oid];
+                                    }
+                                }
+                            }
+                        };
+
                         msg.oid = oids;
                         msg.varbinds = varbinds;
                         msg.oid_value_map = oid_value_map;
                         msg.gapit_code = gapit_code;
+                        msg.gapit_results = gapit_results;
                         node.send(msg);
                     }
                 });
