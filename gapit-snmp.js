@@ -124,6 +124,7 @@ module.exports = function (RED) {
                         msg.oid = oids;
                         msg.varbinds = varbinds;
                         msg.oid_value_map = oid_value_map;
+                        msg.gapit_code = gapit_code;
                         node.send(msg);
                     }
                 });
