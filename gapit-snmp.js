@@ -112,7 +112,8 @@ module.exports = function (RED) {
                         var varbinds_to_delete = Array();
                         for (var i = 0; i < varbinds.length; i++) {
                             if (snmp.isVarbindError(varbinds[i])) {
-                                if (varbinds[i].type == snmp.ObjectType.NoSuchInstance) {
+                                if (varbinds[i].type == snmp.ObjectType.NoSuchInstance || 
+                                    varbinds[i].type == snmp.ObjectType.NoSuchObject) {
                                     // example code uses snmp.ErrorStatus.NoSuchInstance, 
                                     // but it is actually snmp.ObjectType.NoSuchInstance
                                     // node.warn("SNMPv2+ error: " + snmp.varbindError(varbinds[i]), msg);
