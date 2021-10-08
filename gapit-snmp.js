@@ -35,6 +35,18 @@ module.exports = function (RED) {
             var gapit_code = node.gapit_code || msg.gapit_code;
             var skip_nonexistent_oids = node.skip_nonexistent_oids;
 
+            // get context
+            var nodeContext = this.context();
+            // get nonexistent_oids from context
+            var nonexistent_oids = nodeContext.get("nonexistent_oids");
+            // initialize nonexistent_oids in context if it didn't exist
+            if (nonexistent_oids === undefined) {
+                nonexistent_oids = Array();
+                nodeContext.set("nonexistent_oids", nonexistent_oids);
+            }
+            // flag to keep track of changes to nonexistent_oids
+            var nonexistent_oids_modified = false;
+
             // build list of OIDs
             var oids = Array()
             for (const [groups_key, groups] of Object.entries(gapit_code)) {
@@ -43,11 +55,11 @@ module.exports = function (RED) {
                     for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                         var oid = groups[group_idx]["group"][member_idx]["address"];
                         console.info("Found OID " + oid + " for '" + groups[group_idx]["group"][member_idx]["description"] + "'");
-                        //if (skip_nonexistent_oids) {
-                        //    if (context.nonexistent_oids.includes(oid)) {
-                        //        continue;
-                        //    }
-                        //}
+                        if (skip_nonexistent_oids) {
+                            if (nonexistent_oids.includes(oid)) {
+                                continue;
+                            }
+                        }
                         oids.push(oid);
                     }
                 }
@@ -72,14 +84,14 @@ module.exports = function (RED) {
                                     // remove varbinds with these errors, instead of throwing an error
                                     // build list of indexes to delete after iteration is complete
                                     varbinds_to_delete.push(i);
-                                    // nonexistent OIDs should be registered in node context, so they 
-                                    // can be skipped in the next query
-                                    // add to context "nonexistent_oids" array if not already there
-                                    //if (skip_nonexistent_oids) {
-                                    //  if (! context.nonexistent_oids.includes(oid) {
-                                    //    context.nonexistent_oids.push(oid);
-                                    //  }
-                                    //}
+                                    // add to context "nonexistent_oids" array if not already there, 
+                                    // so the OID can be skipped in the next query
+                                    if (skip_nonexistent_oids) {
+                                        if (! nonexistent_oids.includes(oid)) {
+                                            nonexistent_oids.push(varbinds[i]["oid"]);
+                                            nonexistent_oids_modified = true;
+                                        }
+                                    }
                                 }
                                 else {
                                     node.error("SNMPv2+ error: " + snmp.varbindError(varbinds[i]), msg);
@@ -89,6 +101,13 @@ module.exports = function (RED) {
                                 if (varbinds[i].type == 4) { varbinds[i].value = varbinds[i].value.toString(); }
                                 varbinds[i].tstr = snmp.ObjectType[varbinds[i].type];
                                 //node.log(varbinds[i].oid + "|" + varbinds[i].tstr + "|" + varbinds[i].value);
+                            }
+                        }
+
+                        // if modified, save nonexistent_oids to context
+                        if (skip_nonexistent_oids) {
+                            if (nonexistent_oids_modified) {
+                                nodeContext.set("nonexistent_oids", nonexistent_oids)
                             }
                         }
 
