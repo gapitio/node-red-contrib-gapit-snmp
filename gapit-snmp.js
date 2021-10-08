@@ -62,6 +62,7 @@ module.exports = function (RED) {
             this.gapit_code = JSON.parse(config.gapit_code);
         }
         this.skip_nonexistent_oids = config.skip_nonexistent_oids;
+        this.remove_novalue_items_from_gapit_results = config.remove_novalue_items_from_gapit_results;
         this.timeout = Number(config.timeout || 5) * 1000;
         var node = this;
 
@@ -76,6 +77,7 @@ module.exports = function (RED) {
             var community = node.community || msg.community;
             var gapit_code = node.gapit_code || msg.gapit_code;
             var skip_nonexistent_oids = node.skip_nonexistent_oids;
+            var remove_novalue_items_from_gapit_results = node.remove_novalue_items_from_gapit_results;
 
             // get nonexistent_oids from context
             var nonexistent_oids = nodeContext.get("nonexistent_oids");
@@ -162,13 +164,19 @@ module.exports = function (RED) {
                         }
 
                         // map result values into gapit_results
+                        // also, optionally remove items with no value
                         var oids = Array()
                         for (const [groups_key, groups] of Object.entries(gapit_results)) {
                             for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
-                                for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
+                                // iterate array in reverse, to enable deletion
+                                for (var member_idx = groups[group_idx]["group"].length - 1; member_idx >= 0 ; member_idx--) { 
                                     var oid = groups[group_idx]["group"][member_idx]["address"];
                                     if (oid in oid_value_map) {
                                         groups[group_idx]["group"][member_idx]["value"] = oid_value_map[oid];
+                                    }
+                                    else if (remove_novalue_items_from_gapit_results) {
+                                        groups[group_idx]["group"].splice(member_idx, 1);
+                                        //node.warn("should delete this");
                                     }
                                 }
                             }
