@@ -29,21 +29,20 @@ module.exports = function (RED) {
         this.timeout = Number(config.timeout || 5) * 1000;
         var node = this;
 
+        // get context
+        var nodeContext = node.context();
+        // initialize nonexistent_oids in context
+        console.info("initializing nonexistent_oids in context (set to empty Array)")
+        nodeContext.set("nonexistent_oids", Array());
+
         this.on("input", function (msg) {
             var host = node.host || msg.host;
             var community = node.community || msg.community;
             var gapit_code = node.gapit_code || msg.gapit_code;
             var skip_nonexistent_oids = node.skip_nonexistent_oids;
 
-            // get context
-            var nodeContext = this.context();
             // get nonexistent_oids from context
             var nonexistent_oids = nodeContext.get("nonexistent_oids");
-            // initialize nonexistent_oids in context if it didn't exist
-            if (nonexistent_oids === undefined) {
-                nonexistent_oids = Array();
-                nodeContext.set("nonexistent_oids", nonexistent_oids);
-            }
             // flag to keep track of changes to nonexistent_oids
             var nonexistent_oids_modified = false;
 
