@@ -64,6 +64,26 @@ module.exports = function (RED) {
         this.skip_nonexistent_oids = config.skip_nonexistent_oids;
         this.remove_novalue_items_from_gapit_results = config.remove_novalue_items_from_gapit_results;
         this.timeout = Number(config.timeout || 5) * 1000;
+        // add db tags from config to node
+        this.db_tags = {}
+        for (const [key, val] of Object.entries(config)) {
+            if (key.startsWith("tagname_")) {
+                var tag_name = key.substr("tagname_".length);
+                var tagvalue_key = "tagvalue_" + tag_name
+                // console.info("Found tag " + tag_name + ", looking for " + tagvalue_key)
+                if (tagvalue_key in config) {
+                    console.debug("Adding tag " + config[key] + ": " + config[tagvalue_key])
+                    this.db_tags[config[key]] = config[tagvalue_key];
+                }
+                else {
+                    console.warn("Could not find matching " + tagvalue_key + " for " + key);
+                }
+            }
+        }
+        /*console.log("### db_tags:");
+        for (const [key, val] of Object.entries(this.db_tags)) {
+            console.debug("   " + key + ": " + val);
+        }*/
         var node = this;
 
         // get context
@@ -182,6 +202,7 @@ module.exports = function (RED) {
                             }
                         };
 
+                        msg.db_tags = node.db_tags;
                         msg.oid = oids;
                         msg.varbinds = varbinds;
                         msg.oid_value_map = oid_value_map;
