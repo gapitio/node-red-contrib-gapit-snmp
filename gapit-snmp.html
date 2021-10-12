@@ -17,6 +17,14 @@
         <input type="text" id="node-input-timeout" placeholder="secs" style="width:50px; direction:rtl; vertical-align:baseline;">&nbsp;S
     </div>
     <div class="form-row">
+        <label for="node-input-tagvalue_device_name"><i class="fa fa-file-code-o"></i> Device name</label>
+        <input type="text" id="node-input-tagvalue_device_name" />
+    </div>
+    <div class="form-row">
+        <label for="node-input-tagname_device_name"><i class="fa fa-file-code-o"></i> Device name db-tag</label>
+        <input type="text" id="node-input-tagname_device_name" />
+    </div>
+    <div class="form-row">
         <label for="node-input-gapit_code"><i class="fa fa-file-code-o"></i> Gapit code</label>
         <input type="text" id="node-input-gapit_code" />
     </div>
@@ -50,6 +58,8 @@
             host: { value: "127.0.0.1" },
             community: { value: "public" },
             version: { value: "1", required: true },
+            tagname_device_name: { value: "device_name", required: true },
+            tagvalue_device_name: { value: "default_name", required: true },
             gapit_code: { value: "" },
             skip_nonexistent_oids: { value: true },
             remove_novalue_items_from_gapit_results: { value: true },
