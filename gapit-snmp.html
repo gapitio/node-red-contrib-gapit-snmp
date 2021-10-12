@@ -83,3 +83,31 @@
         },
     });
 </script>
+
+
+<script type="text/javascript">
+    RED.nodes.registerType('gapit-results-to-influx-batch',{
+        category: 'function',
+        color: "YellowGreen",
+        defaults: {
+            name: {value:""}
+        },
+        inputs:1,
+        outputs:1,
+        icon: "file.png",
+        label: function() {
+            return this.name||"gapit-results-to-influx-batch";
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="gapit-results-to-influx-batch">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="gapit-results-to-influx-batch">
+    <p>A node that converts the msg.gapit_results property (e.g. from gapit-snmp) into a format that can be inserted into influxdb using the "influx batch" node (from node-red-contrib-influxdb).</p>
+</script>

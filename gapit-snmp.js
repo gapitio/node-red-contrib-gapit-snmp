@@ -218,4 +218,50 @@ module.exports = function (RED) {
         });
     }
     RED.nodes.registerType("gapit-snmp", GapitSnmpNode);
+
+
+    function GapitResultsToInfluxBatchNode(config) {
+        RED.nodes.createNode(this,config);
+        var node = this;
+        node.on('input', function(msg) {
+            var payload_tmp = Array()
+
+            for (const [groups_key, groups] of Object.entries(msg.gapit_results)) {
+                for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
+                    // check for "value" in case gapit_results wasn't filtered before
+                    // only create measurement data if there are measurements for the group
+                    var values_found = false
+                    for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
+                        if ("value" in groups[group_idx]["group"][member_idx]) {
+                            values_found = true;
+                            break;
+                        }
+                    }
+                    if (values_found) {
+                        // prepare object for measurement
+                        var measurement_tmp = {}
+                        measurement_tmp.measurement = groups[group_idx]["group_name"];
+                        measurement_tmp.fields = {}
+                        measurement_tmp.tags = msg.db_tags
+                        measurement_tmp.timestamp = msg.ts; //probably need to be a Date
+                        // add fields
+                        for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
+                            if ("value" in groups[group_idx]["group"][member_idx]) {
+                                const description = groups[group_idx]["group"][member_idx]["description"];
+                                measurement_tmp.fields[description] = groups[group_idx]["group"][member_idx]["value"];
+                            }
+                        }
+                        // add dynamic tags
+                        // ...nothing yet
+                        // push to payload_tmp
+                        payload_tmp.push(measurement_tmp);
+                    }
+                }
+            };
+
+            msg.payload = payload_tmp;
+            node.send(msg);
+        });
+    }
+    RED.nodes.registerType("gapit-results-to-influx-batch", GapitResultsToInfluxBatchNode);
 };
