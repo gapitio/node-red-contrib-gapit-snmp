@@ -58,7 +58,7 @@ module.exports = function (RED) {
         this.community = config.community;
         this.host = config.host;
         this.version = (config.version === "2c") ? snmp.Version2c : snmp.Version1;
-        if (this.gapit_code) {
+        if (config.gapit_code) {
             this.gapit_code = JSON.parse(config.gapit_code);
         }
         this.skip_nonexistent_oids = config.skip_nonexistent_oids;
