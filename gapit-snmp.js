@@ -250,7 +250,7 @@ module.exports = function (RED) {
             if (oids.length > 0) {
                 getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
                     if (error) {
-                        node.error("SNMPv1 error: " + error.toString(), msg);
+                        node.error("Request error: " + error.toString(), msg);
                         // handle NoSuchName
                         // "SNMPv1 error: RequestFailedError: NoSuchName: 1.2.3"
                     }
@@ -277,7 +277,7 @@ module.exports = function (RED) {
                                     }
                                 }
                                 else {
-                                    node.error("SNMPv2+ error: " + snmp.varbindError(varbinds[i]), msg);
+                                    node.error("OID/varbind error: " + snmp.varbindError(varbinds[i]), msg);
                                 }
                             }
                             else {
