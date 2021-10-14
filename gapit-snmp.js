@@ -18,6 +18,7 @@ module.exports = function (RED) {
         return sessions[sessionKey];
     }
 
+
     function getGapitCodeResultsStructure(gapit_code) {
         // Create a copy of gapit_code for storing results.
         //
