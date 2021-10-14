@@ -163,6 +163,8 @@ module.exports = function (RED) {
                         this.registers[common_field_name]["register1"] = -1;
                         this.registers[common_field_name]["register2"] = -1;
                         this.registers[common_field_name]["register3"] = -1;
+                        // set result to an invalid value as well
+                        result = -1
                     }
                 }
             }
