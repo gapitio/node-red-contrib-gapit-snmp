@@ -29,6 +29,10 @@
         <input type="text" id="node-input-gapit_code" />
     </div>
     <div class="form-row">
+        <label for="node-input-scaling"><i class="fa fa-tag"></i> Scaling</label>
+        <input type="text" id="node-input-scaling">
+    </div>
+    <div class="form-row">
         <label for="node-input-skip_nonexistent_oids"><i class="fa fa-remove"></i> Skip nonexistent OIDs in subsequent queries</label>
         <input type="checkbox" id="node-input-skip_nonexistent_oids" />
     </div>
@@ -61,6 +65,7 @@
             tagname_device_name: { value: "device_name", required: true },
             tagvalue_device_name: { value: "default_name", required: true },
             gapit_code: { value: "" },
+            scaling: { value: "general" },
             skip_nonexistent_oids: { value: true },
             remove_novalue_items_from_gapit_results: { value: true },
             timeout: { value: 5 },
@@ -79,7 +84,18 @@
             $("#node-input-gapit_code").typedInput({
                 type:"json",
                 types:["json"]
-            })
+            });
+            $("#node-input-scaling").typedInput({
+                types: [
+                    {
+                        value: "general",
+                        options: [
+                            { value: "general", label: "General"},
+                            { value: "schleifenbauer", label: "Schleifenbauer"},
+                        ]
+                    }
+                ]
+            });
         },
     });
 </script>
