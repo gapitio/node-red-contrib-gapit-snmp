@@ -134,16 +134,15 @@ module.exports = function (RED) {
                     }
                 }
 
-                if (unit == "register1") {
-                    this.registers[common_field_name]["register1"] = result;
-                }
-                else if (unit == "register2") {
-                    this.registers[common_field_name]["register2"] = result;
-                }
-                else if (unit == "register3") {
-                    this.registers[common_field_name]["register3"] = result;
-                }
-                else if (unit == "register4") {
+                if (unit != "register4") 
+                    // register 1/2/3, persist value for later sum
+                    //
+                    // if a "register5" or "registerBob" exists in gapit code, 
+                    // it would also be persisted, but it won't be used to 
+                    // calculate the sum anyway
+                    this.registers[common_field_name][unit] = result;
+                else {
+                    // unit == register4
                     // if registers 1 through 3 are set (not -1), return sum
                     if (this.registers[common_field_name]["register1"] != -1 &&
                             this.registers[common_field_name]["register2"] != -1 && 
