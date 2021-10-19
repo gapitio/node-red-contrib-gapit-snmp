@@ -322,7 +322,7 @@ module.exports = function (RED) {
                         // if modified, save nonexistent_oids to context
                         if (skip_nonexistent_oids) {
                             if (nonexistent_oids_modified) {
-                                nodeContext.set("nonexistent_oids", nonexistent_oids)
+                                nodeContext.set("nonexistent_oids", nonexistent_oids);
                             }
                         }
 
