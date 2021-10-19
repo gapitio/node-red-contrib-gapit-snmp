@@ -25,8 +25,8 @@ module.exports = function (RED) {
         // Remove keys which should be runtime data, which 
         // may be present in older JSON files.
 
-        const group_remove_keys = ["next_read"]
-        const member_remove_keys = ["value"]
+        const group_remove_keys = ["next_read"];
+        const member_remove_keys = ["value"];
 
         // deep copy using JSON stringify/parse
         var gapit_results = JSON.parse(JSON.stringify(gapit_code));
