@@ -228,11 +228,41 @@ module.exports = function (RED) {
             // flag to keep track of changes to nonexistent_oids
             var nonexistent_oids_modified = false;
 
+            // initialize next_read (set 0) if not present
+            var next_read = nodeContext.get("next_read");
+            if (next_read === undefined) {
+                console.debug("no next_read in context, initializing variable");
+                next_read = Object();
+                for (const [groups_key, groups] of Object.entries(gapit_code)) {
+                    next_read[groups_key] = Object();
+                    for (var group_idx = 0; group_idx < groups.length; group_idx++) {
+                        var group_name = groups[group_idx]["group_name"];
+                        // console.log(`setting next_read for ${group_name}`);
+                        next_read[groups_key][group_name] = 0;
+                    }
+                }
+            }
+
             // build list of OIDs
             var oids = Array()
             for (const [groups_key, groups] of Object.entries(gapit_code)) {
                 for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
-                    console.info("Getting OIDs from group '" + groups[group_idx]["group_name"] + "'");
+                    var group_name = groups[group_idx]["group_name"];
+
+                    var ts = Math.trunc(new Date().valueOf() / 1000);
+                    if (ts < next_read[groups_key][group_name] || groups[group_idx]["read_priority"] == "n") {
+                        if (ts < next_read[groups_key][group_name]) {
+                            var next_read_time = new Date(next_read[groups_key][group_name] * 1000).toLocaleTimeString();
+                            console.debug(`Skipping group '${group_name}' until next_read time (${next_read_time})`);
+                        }
+                        else if (groups[group_idx]["read_priority"] == "n") {
+                            console.debug(`Skipping ${group_name}, read_priority == "n"`);
+                        }
+                        continue;
+                    }
+
+                    next_read[groups_key][group_name] = ts + groups[group_idx]["read_priority"];
+                    console.info("Getting OIDs from group '" + group_name + "'");
                     for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                         var oid = groups[group_idx]["group"][member_idx]["address"];
                         console.info("Found OID " + oid + " for '" + groups[group_idx]["group"][member_idx]["description"] + "'");
@@ -295,6 +325,9 @@ module.exports = function (RED) {
                                 nodeContext.set("nonexistent_oids", nonexistent_oids)
                             }
                         }
+
+                        // save next_read to context
+                        nodeContext.set("next_read", next_read);
 
                         // reverse the list of varbinds to delete, 
                         // to delete starting at the end of the array
