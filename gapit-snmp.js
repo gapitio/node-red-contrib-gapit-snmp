@@ -192,6 +192,7 @@ module.exports = function (RED) {
         else { 
             this.minion_ids = Array(); 
         }
+        // parse Gapit code JSON if present in config
         if (config.gapit_code) {
             this.gapit_code = JSON.parse(config.gapit_code);
         }
