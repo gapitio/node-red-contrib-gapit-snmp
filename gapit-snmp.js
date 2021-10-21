@@ -175,9 +175,23 @@ module.exports = function (RED) {
 
     function GapitSnmpNode(config) {
         RED.nodes.createNode(this, config);
+        this.multi_device_separator = ";";
         this.community = config.community;
         this.host = config.host;
         this.version = (config.version === "2c") ? snmp.Version2c : snmp.Version1;
+        this.tagname_device_name = config.tagname_device_name.trim();
+        this.tagvalue_device_name = config.tagvalue_device_name.trim();
+        // split device_name from config into an array
+        this.device_names = this.tagvalue_device_name.split(this.multi_device_separator);
+        // split minion_ids from config into an array
+        // splitting an empty string yields an array with 
+        // one empty string, so check length of string
+        if (config.minion_ids.trim().length > 0) {
+            this.minion_ids = config.minion_ids.trim().split(this.multi_device_separator);
+        } 
+        else { 
+            this.minion_ids = Array(); 
+        }
         if (config.gapit_code) {
             this.gapit_code = JSON.parse(config.gapit_code);
         }
@@ -185,10 +199,26 @@ module.exports = function (RED) {
         this.skip_nonexistent_oids = config.skip_nonexistent_oids;
         this.remove_novalue_items_from_gapit_results = config.remove_novalue_items_from_gapit_results;
         this.timeout = Number(config.timeout || 5) * 1000;
+        // set up mapping from device_name to minion_id
+        this.device_name_to_minion_id = Object();
+        if (this.minion_ids.length > 0) {
+            if (this.minion_ids.length != this.device_names.length) {
+                this.error("'Device name' and 'Minion IDs' must contain the same number of items");
+            }
+            for (const [i, devname] of Object.entries(this.device_names)) {
+                this.device_name_to_minion_id[devname] = this.minion_ids[i];
+            }
+        }
+        else {
+            // single device, no minion id
+            // minion_id = -1 to indicate that minion id replacement 
+            // should not be performed on OIDs.
+            this.device_name_to_minion_id[this.device_names[0]] = -1;
+        }
         // add db tags from config to node
         this.db_tags = {}
         for (const [key, val] of Object.entries(config)) {
-            if (key.startsWith("tagname_")) {
+            if (key.startsWith("tagname_") && key != "tagname_device_name") { 
                 var tag_name = key.substr("tagname_".length);
                 var tagvalue_key = "tagvalue_" + tag_name
                 // console.info("Found tag " + tag_name + ", looking for " + tagvalue_key)
@@ -219,9 +249,52 @@ module.exports = function (RED) {
         this.on("input", function (msg) {
             var host = node.host || msg.host;
             var community = node.community || msg.community;
-            var gapit_code = node.gapit_code || msg.gapit_code;
+            // deep copy gapit_code, so this variable can be modified without affecting config object
+            var gapit_code = JSON.parse(JSON.stringify(node.gapit_code || msg.gapit_code));
             var skip_nonexistent_oids = node.skip_nonexistent_oids;
             var remove_novalue_items_from_gapit_results = node.remove_novalue_items_from_gapit_results;
+
+            // if multiple minions are specified, verify that the 
+            // number of device names matches the number of minions
+            if (node.minion_ids.length > 0 && node.minion_ids.length != node.device_names.length) {
+                node.error("'Device name' and 'Minion IDs' must contain the same number of items");
+                // node.error() should break the flow, but... no?
+                return;
+            }
+
+            // expand config to support querying for multiple minions.
+            // modify gapit_config to have device_name as key, in place of "objects", 
+            // with one copy of config per device_name.
+            // 
+            for (const device_name of node.device_names) {
+                // in case of empty device names (;;)
+                if(device_name.length > 0) {
+                    console.debug(`Copying gapit_code["objects"] to gapit_code[${device_name}]`);
+                    gapit_code[device_name] = JSON.parse(JSON.stringify(gapit_code["objects"]));
+                    var minion_id = node.device_name_to_minion_id[device_name];
+                    if (minion_id != -1) {
+                        // miniond_id == -1 means minion_ids was not specified in node config
+                        console.debug(`Replacing minion ID in OIDs for "${device_name}", id ${minion_id}`);
+                        var groups = gapit_code[device_name];
+                        for (var group_idx = 0; group_idx < groups.length; group_idx++) {
+                            for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
+                                var oid = groups[group_idx]["group"][member_idx]["address"];
+                                oid = oid.replace("x", minion_id);
+                                groups[group_idx]["group"][member_idx]["address"] = oid;
+                            }
+                        }
+                    }
+                }
+            }
+            // remove original "objects" from gapit_code, leaving only 
+            // device_name keys. even if tagvalue_device_name is required, 
+            // it is still possible (with a warning) to deploy a flow 
+            // without it, so first verify that there is more than one 
+            // key present.
+            if (Object.keys(gapit_code).length > 1) {
+                console.debug("Removing original gapit_code['objects']");
+                delete gapit_code["objects"];
+            }
 
             // get nonexistent_oids from context
             var nonexistent_oids = nodeContext.get("nonexistent_oids");
@@ -270,6 +343,11 @@ module.exports = function (RED) {
                             if (nonexistent_oids.includes(oid)) {
                                 continue;
                             }
+                        }
+                        // duplicate OIDs kill the SNMP request
+                        if (oids.includes(oid)) {
+                            // already in Array, skip
+                            continue;
                         }
                         oids.push(oid);
                     }
@@ -372,6 +450,7 @@ module.exports = function (RED) {
                         };
 
                         msg.db_tags = node.db_tags;
+                        msg.tagname_device_name = node.tagname_device_name;
                         msg.oid = oids;
                         msg.varbinds = varbinds;
                         msg.oid_value_map = oid_value_map;
@@ -411,7 +490,8 @@ module.exports = function (RED) {
                         var measurement_tmp = {}
                         measurement_tmp.measurement = groups[group_idx]["group_name"];
                         measurement_tmp.fields = {}
-                        measurement_tmp.tags = msg.db_tags
+                        measurement_tmp.tags = JSON.parse(JSON.stringify(msg.db_tags)); // copy object
+                        measurement_tmp.tags[msg.tagname_device_name] = groups_key;
                         measurement_tmp.timestamp = msg.ts; //probably need to be a Date
                         // add fields
                         for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 

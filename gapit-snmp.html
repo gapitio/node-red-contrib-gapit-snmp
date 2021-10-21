@@ -25,6 +25,10 @@
         <input type="text" id="node-input-tagname_device_name" />
     </div>
     <div class="form-row">
+        <label for="node-input-minion_ids"><i class="fa fa-ellipsis-h"></i> Minion IDs</label>
+        <input type="text" id="node-input-minion_ids" placeholder="0;1;2">
+    </div>
+    <div class="form-row">
         <label for="node-input-gapit_code"><i class="fa fa-file-code-o"></i> Gapit code</label>
         <input type="text" id="node-input-gapit_code" />
     </div>
@@ -43,6 +47,15 @@
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-tips">
+        <b>Tip:</b> If multiple devices are queried via a single SNMP server, 
+        their IDs may be specified in the <i>Minion IDs</i> field, separated by 
+        <i>;</i> (semicolon). In this case, an equal number of <i>Device name</i>s 
+        must also be specified (also separated by <i>;</i>). 
+        (Querying multiple devices via one SNMP server is implemented by using OIDs 
+        where one of the segments of the OID is variable, representing the device ID. 
+        This is represented by "x" in OIDs in the Gapit code.)
     </div>
 </script>
 
@@ -64,6 +77,7 @@
             version: { value: "1", required: true },
             tagname_device_name: { value: "device_name", required: true },
             tagvalue_device_name: { value: "default_name", required: true },
+            minion_ids: { value: "" },
             gapit_code: { value: "" },
             scaling: { value: "general" },
             skip_nonexistent_oids: { value: true },
