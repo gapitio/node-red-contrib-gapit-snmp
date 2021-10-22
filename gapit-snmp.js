@@ -421,7 +421,7 @@ module.exports = function (RED) {
 
                         // map result values into gapit_results
                         // also, optionally remove items with no value
-                        var oids = Array()
+                        var oids = Array();
                         for (const [groups_key, groups] of Object.entries(gapit_results)) {
                             for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
                                 // iterate array in reverse, to enable deletion
