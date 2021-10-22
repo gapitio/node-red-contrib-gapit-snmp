@@ -518,6 +518,13 @@ module.exports = function (RED) {
                         measurement_tmp.fields = {}
                         measurement_tmp.tags = JSON.parse(JSON.stringify(msg.db_tags)); // copy object
                         measurement_tmp.tags[msg.tagname_device_name] = groups_key;
+                        if (groups_key in msg.custom_tags) {
+                            // add minion-specific custom tags
+                            for (const [minion_key, minion_val] of Object.entries(msg.custom_tags[groups_key])) {
+                                console.debug("Adding custom (minion-specific) tag " + minion_key + ": " + minion_val)
+                                measurement_tmp.tags[minion_key] = minion_val;
+                            }
+                        }
                         measurement_tmp.timestamp = msg.ts; //probably need to be a Date
                         // add fields
                         for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
