@@ -192,6 +192,13 @@ module.exports = function (RED) {
         else { 
             this.minion_ids = Array(); 
         }
+        // parse custom tags JSON if present in config
+        if (config.custom_tags) {
+            this.custom_tags = JSON.parse(config.custom_tags);
+        }
+        else {
+            this.custom_tags = Object();
+        }
         // parse Gapit code JSON if present in config
         if (config.gapit_code) {
             this.gapit_code = JSON.parse(config.gapit_code);
@@ -232,6 +239,23 @@ module.exports = function (RED) {
                 }
             }
         }
+        // add custom tags for all minions, or when no minions are 
+        // specified. minion-specific tags must be processed later, 
+        // e.g. in gapit-results-to-influx-batch node.
+        for (const [root_key, root_val] of Object.entries(this.custom_tags)) {
+            if (this.minion_ids.length == 0) {
+                // no minions, add tags from root
+                console.debug("Adding custom tag " + root_key + ": " + root_val)
+                this.db_tags[root_key] = root_val;
+            }
+            else if (root_key == "all-minion-tags") {
+                for (const [minion_key, minion_val] of Object.entries(root_val)) {
+                    console.debug("Adding custom (all-minion) tag " + minion_key + ": " + minion_val)
+                    this.db_tags[minion_key] = minion_val;
+                }
+            }
+        }
+
         /*console.log("### db_tags:");
         for (const [key, val] of Object.entries(this.db_tags)) {
             console.debug("   " + key + ": " + val);
@@ -451,6 +475,7 @@ module.exports = function (RED) {
                         };
 
                         msg.db_tags = node.db_tags;
+                        msg.custom_tags = node.custom_tags;
                         msg.tagname_device_name = node.tagname_device_name;
                         msg.oid = oids;
                         msg.varbinds = varbinds;

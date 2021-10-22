@@ -29,6 +29,10 @@
         <input type="text" id="node-input-minion_ids" placeholder="0;1;2">
     </div>
     <div class="form-row">
+        <label for="node-input-custom_tags"><i class="fa fa-ellipsis-h"></i> Custom tags</label>
+        <input type="text" id="node-input-custom_tags" placeholder="0;1;2">
+    </div>
+    <div class="form-row">
         <label for="node-input-gapit_code"><i class="fa fa-file-code-o"></i> Gapit code</label>
         <input type="text" id="node-input-gapit_code" />
     </div>
@@ -49,13 +53,21 @@
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
     <div class="form-tips">
-        <b>Tip:</b> If multiple devices are queried via a single SNMP server, 
-        their IDs may be specified in the <i>Minion IDs</i> field, separated by 
-        <i>;</i> (semicolon). In this case, an equal number of <i>Device name</i>s 
-        must also be specified (also separated by <i>;</i>). 
-        (Querying multiple devices via one SNMP server is implemented by using OIDs 
-        where one of the segments of the OID is variable, representing the device ID. 
-        This is represented by "x" in OIDs in the Gapit code.)
+        <p>
+            <b>Tip:</b> If multiple devices are queried via a single SNMP server, 
+            their IDs may be specified in the <i>Minion IDs</i> field, separated by 
+            <i>;</i> (semicolon). In this case, an equal number of <i>Device name</i>s 
+            must also be specified (also separated by <i>;</i>). 
+            (Querying multiple devices via one SNMP server is implemented by using OIDs 
+            where one of the segments of the OID is variable, representing the device ID. 
+            This is represented by "x" in OIDs in the Gapit code.)
+        </p>
+        <p>
+            <b>Custom tags</b><br />
+            Add database tags, formatted as JSON with tag_name: value. If multiple 
+            minions are specified, tags must be in a child object named for the device 
+            name, or "all-minion-tags" for any tags that should be common for all minions.
+        </p>
     </div>
 </script>
 
@@ -78,6 +90,7 @@
             tagname_device_name: { value: "device_name", required: true },
             tagvalue_device_name: { value: "default_name", required: true },
             minion_ids: { value: "" },
+            custom_tags: { value: "" },
             gapit_code: { value: "" },
             scaling: { value: "general" },
             skip_nonexistent_oids: { value: true },
@@ -95,6 +108,10 @@
             return this.name ? "node_label_italic" : "";
         },
         oneditprepare: function () {
+            $("#node-input-custom_tags").typedInput({
+                type:"json",
+                types:["json"]
+            });
             $("#node-input-gapit_code").typedInput({
                 type:"json",
                 types:["json"]
