@@ -137,6 +137,8 @@
         category: 'function',
         color: "YellowGreen",
         defaults: {
+            use_timestamp_from_msg: {value: true}, 
+            timestamp_property: {value: "ts", required: true}, 
             name: {value:""}
         },
         inputs:1,
@@ -149,6 +151,14 @@
 </script>
 
 <script type="text/html" data-template-name="gapit-results-to-influx-batch">
+    <div class="form-row">
+        <label for="node-input-use_timestamp_from_msg"><i class="fa fa-remove"></i> Use timestamp from Message</label>
+        <input type="checkbox" id="node-input-use_timestamp_from_msg" />
+    </div>
+    <div class="form-row">
+        <label for="node-input-timestamp_property"><i class="fa fa-file-code-o"></i> Timestamp property: <b>msg.</b></label>
+        <input type="text" id="node-input-timestamp_property" />
+    </div>
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">

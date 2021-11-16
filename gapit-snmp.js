@@ -496,6 +496,15 @@ module.exports = function (RED) {
 
     function GapitResultsToInfluxBatchNode(config) {
         RED.nodes.createNode(this,config);
+
+        this.use_timestamp_from_msg = config.use_timestamp_from_msg;
+        if (config.timestamp_property !== undefined) {
+            this.timestamp_property = config.timestamp_property.trim();
+        }
+        else {
+            this.timestamp_property = "";
+        }
+
         var node = this;
         node.on('input', function(msg) {
             var payload_tmp = Array()
@@ -525,7 +534,29 @@ module.exports = function (RED) {
                                 measurement_tmp.tags[minion_key] = minion_val;
                             }
                         }
-                        measurement_tmp.timestamp = msg.ts; //probably need to be a Date
+                        if (node.use_timestamp_from_msg) {
+                            if (node.timestamp_property.length > 0) {
+                                if (! isNaN(msg[node.timestamp_property])) {
+                                    measurement_tmp.timestamp = msg[node.timestamp_property];
+                                }
+                                else if (msg[node.timestamp_property] === undefined) {
+                                    node.error(`Node is configured to use timestamp from Message[${node.timestamp_property}], but the property is not set.`);
+                                    return;
+                                }
+                                else {
+                                    node.error(`Node is configured to use timestamp from Message[${node.timestamp_property}], but this property is not set to a number (value: ${msg[node.timestamp_property]}).`);
+                                    return;
+                                }
+                                //else if nan, else if undefined
+                            }
+                            else {
+                                node.error("Node is configured to use timestamp from Message, but the *Timestamp property* is not configured.");
+                                return;
+                            }
+                        }
+                        else {
+                            console.debug("Not sending timestamp with data (influxdb will use its current timestamp)")
+                        }
                         // add fields
                         for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                             if ("value" in groups[group_idx]["group"][member_idx]) {
