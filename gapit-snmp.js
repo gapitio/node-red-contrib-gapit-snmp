@@ -452,23 +452,27 @@ module.exports = function (RED) {
                                 for (var member_idx = groups[group_idx]["group"].length - 1; member_idx >= 0 ; member_idx--) { 
                                     var oid = groups[group_idx]["group"][member_idx]["address"];
                                     if (oid in oid_value_map) {
-                                        
-                                        if(groups[group_idx]["group"][member_idx]["byte_type"] != "STR") {
-                                            // not a string, apply scaling
-                                            groups[group_idx]["group"][member_idx]["value"] = 
-                                                node.scaler.use_scaling(oid_value_map[oid], 
-                                                                        groups[group_idx]["group"][member_idx]["scaling_factor"], 
-                                                                        groups[group_idx]["group"][member_idx]["unit"], 
-                                                                        groups[group_idx]["group"][member_idx]["description"]);
-                                        }
-                                        else {
-                                            // no scaling for string values
-                                            groups[group_idx]["group"][member_idx]["value"] = oid_value_map[oid];
-                                        }
+                                        groups[group_idx]["group"][member_idx]["value"] = oid_value_map[oid];
                                     }
                                     else if (remove_novalue_items_from_gapit_results) {
                                         groups[group_idx]["group"].splice(member_idx, 1);
                                         //node.warn("should delete this");
+                                    }
+                                }
+
+                                // apply scaling
+                                // for certain scaling methods (e.g. Schleifenbauer), the scaling 
+                                // needs to be applied in the defined gapit_code order, hence a 
+                                // separate loop for scaling.
+                                for (var member_idx = 0; member_idx < groups[group_idx]["group"].length ; member_idx++) { 
+                                    if(("value" in groups[group_idx]["group"][member_idx]) 
+                                            && groups[group_idx]["group"][member_idx]["byte_type"] != "STR") {
+                                        // value is set, and not a string, apply scaling
+                                        groups[group_idx]["group"][member_idx]["value"] = 
+                                            node.scaler.use_scaling(groups[group_idx]["group"][member_idx]["value"], 
+                                                                    groups[group_idx]["group"][member_idx]["scaling_factor"], 
+                                                                    groups[group_idx]["group"][member_idx]["unit"], 
+                                                                    groups[group_idx]["group"][member_idx]["description"]);
                                     }
                                 }
                             }
