@@ -498,12 +498,22 @@ module.exports = function (RED) {
                             msg.v1Varbinds = Array();
                             for (const oid of oids) {
                                 console.debug(`SNMPv1 single-OID query for '${oid}'`);
+                                // get nonexistent_oids from context
+                                var nonexistent_oids = nodeContext.get("nonexistent_oids");
+                                // flag to keep track of changes to nonexistent_oids
+                                var nonexistent_oids_modified = false;
                                 getSession(host, community, node.version, node.timeout).get([oid], function (singleQueryError, singleQueryVarbinds) {
                                     msg.v1ResponseCount += 1;
                                     console.debug(`Got SNMPv1 single-OID response #${msg.v1ResponseCount} of ${msg.v1QueryCount}`);
                                     if (singleQueryError) {
                                         if((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
                                             node.warn(`SNMPv1 single-OID query: OID '${oid}' is not present`);
+                                            if (node.config.skip_nonexistent_oids) {
+                                                if (! nonexistent_oids.includes(oid)) {
+                                                    nonexistent_oids.push(oid);
+                                                    nonexistent_oids_modified = true;
+                                                }
+                                            }
                                         }
                                         else {
                                             node.error(`SNMPv1 single-OID request error: ${singleQueryError.toString()}`);
@@ -519,6 +529,13 @@ module.exports = function (RED) {
                                         node.processVarbinds(msg, msg.v1Varbinds);
                                     }
                                 });
+
+                                // if modified, save nonexistent_oids to context
+                                if (node.config.skip_nonexistent_oids) {
+                                    if (nonexistent_oids_modified) {
+                                        nodeContext.set("nonexistent_oids", nonexistent_oids);
+                                    }
+                                }
                             }
                         }
                         else {
