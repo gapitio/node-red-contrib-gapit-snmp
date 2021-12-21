@@ -175,6 +175,7 @@ module.exports = function (RED) {
 
     function GapitSnmpNode(config) {
         RED.nodes.createNode(this, config);
+        this.config = config;
         this.multi_device_separator = ";";
         this.community = config.community;
         this.host = config.host;
@@ -201,11 +202,9 @@ module.exports = function (RED) {
         }
         // parse Gapit code JSON if present in config
         if (config.gapit_code) {
-            this.gapit_code = JSON.parse(config.gapit_code);
+            config.gapit_code = JSON.parse(config.gapit_code);
         }
         this.scaling = config.scaling;
-        this.skip_nonexistent_oids = config.skip_nonexistent_oids;
-        this.remove_novalue_items_from_gapit_results = config.remove_novalue_items_from_gapit_results;
         this.timeout = Number(config.timeout || 5) * 1000;
         // set up mapping from device_name to minion_id
         this.device_name_to_minion_id = Object();
@@ -271,13 +270,115 @@ module.exports = function (RED) {
         console.info("initializing nonexistent_oids in context (set to empty Array)")
         nodeContext.set("nonexistent_oids", Array());
 
+        this.processVarbinds = function (msg, varbinds) {
+            // get nonexistent_oids from context
+            var nonexistent_oids = nodeContext.get("nonexistent_oids");
+            // flag to keep track of changes to nonexistent_oids
+            var nonexistent_oids_modified = false;
+            // get result structure
+            var gapit_results = getGapitCodeResultsStructure(msg.gapit_code);
+
+            var varbinds_to_delete = Array();
+            for (var i = 0; i < varbinds.length; i++) {
+                if (snmp.isVarbindError(varbinds[i])) {
+                    if (varbinds[i].type == snmp.ObjectType.NoSuchInstance || 
+                        varbinds[i].type == snmp.ObjectType.NoSuchObject) {
+                        // example code uses snmp.ErrorStatus.NoSuchInstance, 
+                        // but it is actually snmp.ObjectType.NoSuchInstance
+                        // node.warn("SNMPv2+ error: " + snmp.varbindError(varbinds[i]), msg);
+                        node.warn("OID '" + varbinds[i]["oid"] + "' is not present")
+                        // remove varbinds with these errors, instead of throwing an error
+                        // build list of indexes to delete after iteration is complete
+                        varbinds_to_delete.push(i);
+                        // add to context "nonexistent_oids" array if not already there, 
+                        // so the OID can be skipped in the next query
+                        if (node.config.skip_nonexistent_oids) {
+                            if (! nonexistent_oids.includes(oid)) {
+                                nonexistent_oids.push(varbinds[i]["oid"]);
+                                nonexistent_oids_modified = true;
+                            }
+                        }
+                    }
+                    else {
+                        node.error("OID/varbind error: " + snmp.varbindError(varbinds[i]), msg);
+                    }
+                }
+                else {
+                    if (varbinds[i].type == 4) { varbinds[i].value = varbinds[i].value.toString(); }
+                    varbinds[i].tstr = snmp.ObjectType[varbinds[i].type];
+                    //node.log(varbinds[i].oid + "|" + varbinds[i].tstr + "|" + varbinds[i].value);
+                }
+            }
+
+            // if modified, save nonexistent_oids to context
+            if (node.config.skip_nonexistent_oids) {
+                if (nonexistent_oids_modified) {
+                    nodeContext.set("nonexistent_oids", nonexistent_oids);
+                }
+            }
+
+            // reverse the list of varbinds to delete, 
+            // to delete starting at the end of the array
+            varbinds_to_delete.reverse().forEach(function(i) {
+                varbinds.splice(i, 1);
+            });
+
+            var oid_value_map = Object();
+            for (var i = 0; i < varbinds.length; i++) {
+                oid_value_map[varbinds[i]["oid"]] = varbinds[i]["value"];
+            }
+
+            // map result values into gapit_results
+            // also, optionally remove items with no value
+            for (const [groups_key, groups] of Object.entries(gapit_results)) {
+                for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
+                    // iterate array in reverse, to enable deletion
+                    for (var member_idx = groups[group_idx]["group"].length - 1; member_idx >= 0 ; member_idx--) { 
+                        var oid = groups[group_idx]["group"][member_idx]["address"];
+                        if (oid in oid_value_map) {
+                            groups[group_idx]["group"][member_idx]["value"] = oid_value_map[oid];
+                        }
+                        else if (node.config.remove_novalue_items_from_gapit_results) {
+                            groups[group_idx]["group"].splice(member_idx, 1);
+                            //node.warn("should delete this");
+                        }
+                    }
+
+                    // apply scaling
+                    // for certain scaling methods (e.g. Schleifenbauer), the scaling 
+                    // needs to be applied in the defined gapit_code order, hence a 
+                    // separate loop for scaling.
+                    for (var member_idx = 0; member_idx < groups[group_idx]["group"].length ; member_idx++) { 
+                        if(("value" in groups[group_idx]["group"][member_idx]) 
+                                && groups[group_idx]["group"][member_idx]["byte_type"] != "STR") {
+                            // value is set, and not a string, apply scaling
+                            groups[group_idx]["group"][member_idx]["value"] = 
+                                node.scaler.use_scaling(groups[group_idx]["group"][member_idx]["value"], 
+                                                        groups[group_idx]["group"][member_idx]["scaling_factor"], 
+                                                        groups[group_idx]["group"][member_idx]["unit"], 
+                                                        groups[group_idx]["group"][member_idx]["description"]);
+                        }
+                    }
+                }
+            };
+
+            msg.db_tags = node.db_tags;
+            msg.custom_tags = node.custom_tags;
+            // hmf... msg.device_names? no, add in result2influx..?
+            // customtags added "raw"? result2influx can map by device_name
+            //msg.device_name_to_minion_id = node.device_name_to_minion_id;
+            msg.tagname_device_name = node.tagname_device_name;
+            msg.varbinds = varbinds;
+            msg.oid_value_map = oid_value_map;
+            msg.gapit_results = gapit_results;
+            node.send(msg);
+        }
+
         this.on("input", function (msg) {
             var host = node.host || msg.host;
             var community = node.community || msg.community;
             // deep copy gapit_code, so this variable can be modified without affecting config object
-            var gapit_code = JSON.parse(JSON.stringify(node.gapit_code || msg.gapit_code));
-            var skip_nonexistent_oids = node.skip_nonexistent_oids;
-            var remove_novalue_items_from_gapit_results = node.remove_novalue_items_from_gapit_results;
+            msg.gapit_code = JSON.parse(JSON.stringify(node.config.gapit_code || msg.gapit_code));
 
             // if multiple minions are specified, verify that the 
             // number of device names matches the number of minions
@@ -295,12 +396,12 @@ module.exports = function (RED) {
                 // in case of empty device names (;;)
                 if(device_name.length > 0) {
                     console.debug(`Copying gapit_code["objects"] to gapit_code[${device_name}]`);
-                    gapit_code[device_name] = JSON.parse(JSON.stringify(gapit_code["objects"]));
+                    msg.gapit_code[device_name] = JSON.parse(JSON.stringify(msg.gapit_code["objects"]));
                     var minion_id = node.device_name_to_minion_id[device_name];
                     if (minion_id != -1) {
                         // miniond_id == -1 means minion_ids was not specified in node config
                         console.debug(`Replacing minion ID in OIDs for "${device_name}", id ${minion_id}`);
-                        var groups = gapit_code[device_name];
+                        var groups = msg.gapit_code[device_name];
                         for (var group_idx = 0; group_idx < groups.length; group_idx++) {
                             for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                                 var oid = groups[group_idx]["group"][member_idx]["address"];
@@ -316,22 +417,20 @@ module.exports = function (RED) {
             // it is still possible (with a warning) to deploy a flow 
             // without it, so first verify that there is more than one 
             // key present.
-            if (Object.keys(gapit_code).length > 1) {
+            if (Object.keys(msg.gapit_code).length > 1) {
                 console.debug("Removing original gapit_code['objects']");
-                delete gapit_code["objects"];
+                delete msg.gapit_code["objects"];
             }
 
             // get nonexistent_oids from context
             var nonexistent_oids = nodeContext.get("nonexistent_oids");
-            // flag to keep track of changes to nonexistent_oids
-            var nonexistent_oids_modified = false;
 
             // initialize next_read (set 0) if not present
             var next_read = nodeContext.get("next_read");
             if (next_read === undefined) {
                 console.debug("no next_read in context, initializing variable");
                 next_read = Object();
-                for (const [groups_key, groups] of Object.entries(gapit_code)) {
+                for (const [groups_key, groups] of Object.entries(msg.gapit_code)) {
                     next_read[groups_key] = Object();
                     for (var group_idx = 0; group_idx < groups.length; group_idx++) {
                         var group_name = groups[group_idx]["group_name"];
@@ -343,7 +442,7 @@ module.exports = function (RED) {
 
             // build list of OIDs
             var oids = Array()
-            for (const [groups_key, groups] of Object.entries(gapit_code)) {
+            for (const [groups_key, groups] of Object.entries(msg.gapit_code)) {
                 for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
                     var group_name = groups[group_idx]["group_name"];
 
@@ -364,7 +463,7 @@ module.exports = function (RED) {
                     for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                         var oid = groups[group_idx]["group"][member_idx]["address"];
                         console.info("Found OID " + oid + " for '" + groups[group_idx]["group"][member_idx]["description"] + "'");
-                        if (skip_nonexistent_oids) {
+                        if (node.config.skip_nonexistent_oids) {
                             if (nonexistent_oids.includes(oid)) {
                                 continue;
                             }
@@ -379,8 +478,8 @@ module.exports = function (RED) {
                 }
             };
 
-            // get result structure
-            var gapit_results = getGapitCodeResultsStructure(gapit_code);
+            // save next_read to context
+            nodeContext.set("next_read", next_read);
 
             if (oids.length > 0) {
                 getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
@@ -390,102 +489,7 @@ module.exports = function (RED) {
                         // "SNMPv1 error: RequestFailedError: NoSuchName: 1.2.3"
                     }
                     else {
-                        var varbinds_to_delete = Array();
-                        for (var i = 0; i < varbinds.length; i++) {
-                            if (snmp.isVarbindError(varbinds[i])) {
-                                if (varbinds[i].type == snmp.ObjectType.NoSuchInstance || 
-                                    varbinds[i].type == snmp.ObjectType.NoSuchObject) {
-                                    // example code uses snmp.ErrorStatus.NoSuchInstance, 
-                                    // but it is actually snmp.ObjectType.NoSuchInstance
-                                    // node.warn("SNMPv2+ error: " + snmp.varbindError(varbinds[i]), msg);
-                                    node.warn("OID '" + varbinds[i]["oid"] + "' is not present")
-                                    // remove varbinds with these errors, instead of throwing an error
-                                    // build list of indexes to delete after iteration is complete
-                                    varbinds_to_delete.push(i);
-                                    // add to context "nonexistent_oids" array if not already there, 
-                                    // so the OID can be skipped in the next query
-                                    if (skip_nonexistent_oids) {
-                                        if (! nonexistent_oids.includes(oid)) {
-                                            nonexistent_oids.push(varbinds[i]["oid"]);
-                                            nonexistent_oids_modified = true;
-                                        }
-                                    }
-                                }
-                                else {
-                                    node.error("OID/varbind error: " + snmp.varbindError(varbinds[i]), msg);
-                                }
-                            }
-                            else {
-                                if (varbinds[i].type == 4) { varbinds[i].value = varbinds[i].value.toString(); }
-                                varbinds[i].tstr = snmp.ObjectType[varbinds[i].type];
-                                //node.log(varbinds[i].oid + "|" + varbinds[i].tstr + "|" + varbinds[i].value);
-                            }
-                        }
-
-                        // if modified, save nonexistent_oids to context
-                        if (skip_nonexistent_oids) {
-                            if (nonexistent_oids_modified) {
-                                nodeContext.set("nonexistent_oids", nonexistent_oids);
-                            }
-                        }
-
-                        // save next_read to context
-                        nodeContext.set("next_read", next_read);
-
-                        // reverse the list of varbinds to delete, 
-                        // to delete starting at the end of the array
-                        varbinds_to_delete.reverse().forEach(function(i) {
-                            varbinds.splice(i, 1);
-                        });
-
-                        var oid_value_map = Object();
-                        for (var i = 0; i < varbinds.length; i++) {
-                            oid_value_map[varbinds[i]["oid"]] = varbinds[i]["value"];
-                        }
-
-                        // map result values into gapit_results
-                        // also, optionally remove items with no value
-                        for (const [groups_key, groups] of Object.entries(gapit_results)) {
-                            for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
-                                // iterate array in reverse, to enable deletion
-                                for (var member_idx = groups[group_idx]["group"].length - 1; member_idx >= 0 ; member_idx--) { 
-                                    var oid = groups[group_idx]["group"][member_idx]["address"];
-                                    if (oid in oid_value_map) {
-                                        groups[group_idx]["group"][member_idx]["value"] = oid_value_map[oid];
-                                    }
-                                    else if (remove_novalue_items_from_gapit_results) {
-                                        groups[group_idx]["group"].splice(member_idx, 1);
-                                        //node.warn("should delete this");
-                                    }
-                                }
-
-                                // apply scaling
-                                // for certain scaling methods (e.g. Schleifenbauer), the scaling 
-                                // needs to be applied in the defined gapit_code order, hence a 
-                                // separate loop for scaling.
-                                for (var member_idx = 0; member_idx < groups[group_idx]["group"].length ; member_idx++) { 
-                                    if(("value" in groups[group_idx]["group"][member_idx]) 
-                                            && groups[group_idx]["group"][member_idx]["byte_type"] != "STR") {
-                                        // value is set, and not a string, apply scaling
-                                        groups[group_idx]["group"][member_idx]["value"] = 
-                                            node.scaler.use_scaling(groups[group_idx]["group"][member_idx]["value"], 
-                                                                    groups[group_idx]["group"][member_idx]["scaling_factor"], 
-                                                                    groups[group_idx]["group"][member_idx]["unit"], 
-                                                                    groups[group_idx]["group"][member_idx]["description"]);
-                                    }
-                                }
-                            }
-                        };
-
-                        msg.db_tags = node.db_tags;
-                        msg.custom_tags = node.custom_tags;
-                        msg.tagname_device_name = node.tagname_device_name;
-                        msg.oid = oids;
-                        msg.varbinds = varbinds;
-                        msg.oid_value_map = oid_value_map;
-                        msg.gapit_code = gapit_code;
-                        msg.gapit_results = gapit_results;
-                        node.send(msg);
+                        node.processVarbinds(msg, varbinds);
                     }
                 });
             }
