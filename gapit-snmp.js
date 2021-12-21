@@ -271,10 +271,6 @@ module.exports = function (RED) {
         nodeContext.set("nonexistent_oids", Array());
 
         this.processVarbinds = function (msg, varbinds) {
-            // get nonexistent_oids from context
-            var nonexistent_oids = nodeContext.get("nonexistent_oids");
-            // flag to keep track of changes to nonexistent_oids
-            var nonexistent_oids_modified = false;
             // get result structure
             var gapit_results = getGapitCodeResultsStructure(msg.gapit_code);
 
@@ -292,12 +288,7 @@ module.exports = function (RED) {
                         varbinds_to_delete.push(i);
                         // add to context "nonexistent_oids" array if not already there, 
                         // so the OID can be skipped in the next query
-                        if (node.config.skip_nonexistent_oids) {
-                            if (! nonexistent_oids.includes(oid)) {
-                                nonexistent_oids.push(varbinds[i]["oid"]);
-                                nonexistent_oids_modified = true;
-                            }
-                        }
+                        node.addNonExistentOid(varbinds[i]["oid"]);
                     }
                     else {
                         node.error("OID/varbind error: " + snmp.varbindError(varbinds[i]), msg);
@@ -310,12 +301,7 @@ module.exports = function (RED) {
                 }
             }
 
-            // if modified, save nonexistent_oids to context
-            if (node.config.skip_nonexistent_oids) {
-                if (nonexistent_oids_modified) {
-                    nodeContext.set("nonexistent_oids", nonexistent_oids);
-                }
-            }
+            node.persistNonExistentOids();
 
             // reverse the list of varbinds to delete, 
             // to delete starting at the end of the array
@@ -374,7 +360,44 @@ module.exports = function (RED) {
             node.send(msg);
         }
 
+        this.readNonExistentOids = function () {
+            // get nonexistent_oids from context
+            node.nonexistent_oids = nodeContext.get("nonexistent_oids");
+            // flag to keep track of changes to nonexistent_oids
+            node.nonexistent_oids_modified = false;
+        }
+
+        this.addNonExistentOid = function (oid) {
+            if (node.config.skip_nonexistent_oids) {
+                if (! node.nonexistent_oids.includes(oid)) {
+                    node.nonexistent_oids.push(oid);
+                    node.nonexistent_oids_modified = true;
+                }
+            }
+        }
+
+        this.isNonExistentOid = function (oid) {
+            if (node.config.skip_nonexistent_oids) {
+                return node.nonexistent_oids.includes(oid);
+            }
+            else {
+                // skip_nonexistent_oids is disabled
+                return false;
+            }
+        }
+
+        this.persistNonExistentOids = function () {
+            // if modified, save nonexistent_oids to context
+            if (node.config.skip_nonexistent_oids) {
+                if (node.nonexistent_oids_modified) {
+                    nodeContext.set("nonexistent_oids", node.nonexistent_oids);
+                }
+            }
+        }
+
         this.on("input", function (msg) {
+            node.readNonExistentOids();
+
             var host = node.host || msg.host;
             var community = node.community || msg.community;
             // deep copy gapit_code, so this variable can be modified without affecting config object
@@ -422,9 +445,6 @@ module.exports = function (RED) {
                 delete msg.gapit_code["objects"];
             }
 
-            // get nonexistent_oids from context
-            var nonexistent_oids = nodeContext.get("nonexistent_oids");
-
             // initialize next_read (set 0) if not present
             var next_read = nodeContext.get("next_read");
             if (next_read === undefined) {
@@ -463,10 +483,9 @@ module.exports = function (RED) {
                     for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                         var oid = groups[group_idx]["group"][member_idx]["address"];
                         console.info("Found OID " + oid + " for '" + groups[group_idx]["group"][member_idx]["description"] + "'");
-                        if (node.config.skip_nonexistent_oids) {
-                            if (nonexistent_oids.includes(oid)) {
-                                continue;
-                            }
+                        if (node.isNonExistentOid(oid)) {
+                            // oid does not exist, skip
+                            continue;
                         }
                         // duplicate OIDs kill the SNMP request
                         if (oids.includes(oid)) {
@@ -498,22 +517,13 @@ module.exports = function (RED) {
                             msg.v1Varbinds = Array();
                             for (const oid of oids) {
                                 console.debug(`SNMPv1 single-OID query for '${oid}'`);
-                                // get nonexistent_oids from context
-                                var nonexistent_oids = nodeContext.get("nonexistent_oids");
-                                // flag to keep track of changes to nonexistent_oids
-                                var nonexistent_oids_modified = false;
                                 getSession(host, community, node.version, node.timeout).get([oid], function (singleQueryError, singleQueryVarbinds) {
                                     msg.v1ResponseCount += 1;
                                     console.debug(`Got SNMPv1 single-OID response #${msg.v1ResponseCount} of ${msg.v1QueryCount}`);
                                     if (singleQueryError) {
                                         if((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
                                             node.warn(`SNMPv1 single-OID query: OID '${oid}' is not present`);
-                                            if (node.config.skip_nonexistent_oids) {
-                                                if (! nonexistent_oids.includes(oid)) {
-                                                    nonexistent_oids.push(oid);
-                                                    nonexistent_oids_modified = true;
-                                                }
-                                            }
+                                            node.addNonExistentOid(oid);
                                         }
                                         else {
                                             node.error(`SNMPv1 single-OID request error: ${singleQueryError.toString()}`);
@@ -530,12 +540,7 @@ module.exports = function (RED) {
                                     }
                                 });
 
-                                // if modified, save nonexistent_oids to context
-                                if (node.config.skip_nonexistent_oids) {
-                                    if (nonexistent_oids_modified) {
-                                        nodeContext.set("nonexistent_oids", nonexistent_oids);
-                                    }
-                                }
+                                node.persistNonExistentOids();
                             }
                         }
                         else {
