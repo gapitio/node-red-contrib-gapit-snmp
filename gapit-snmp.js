@@ -19,6 +19,40 @@ module.exports = function (RED) {
     }
 
 
+    function varbindsConvertCounter64BuffersToNumbers(varbinds) {
+        // Counter64 is not directly supported by net-snmp, 
+        // but returned as a buffer (array). This function 
+        // converts any Counter64 buffers in a varbinds object 
+        // to a Number. The returned buffer is variable length 
+        // (as big as needed to represent the number), while a 
+        // BigInt is 8 bytes, and the function used expects this 
+        // exact buffer length, so the buffer needs to be 
+        // padded before it can be read as a BigInt.
+        //
+        // Based on code from 
+        // https://discourse.nodered.org/t/snmp-access-problem/45990/9
+
+        // deep copy, to not modify the original object
+        // to deep copy or not... remove deep copy _and_ "return"
+        let resultVarbinds = JSON.parse(JSON.stringify(varbinds));
+        for (const varbind of resultVarbinds) {
+            // ignore other data types
+            if(varbind.type !== snmp.ObjectType.Counter64) continue;
+            
+            // can't use varbind.value directly, because it's modified 
+            // by the deep copy (by way of JSON) of varbinds
+            let inputBuffer = Buffer.from(varbind.value);
+            // pad and parse buffer
+            let padBuffer = Buffer.alloc(8 - inputBuffer.length);
+            let bigBuffer = Buffer.concat([padBuffer, inputBuffer]);
+            varbind.bufferValue = varbind.value
+            varbind.value = Number(bigBuffer.readBigInt64BE());
+        }
+
+        return resultVarbinds;
+    }
+
+
     function getGapitCodeResultsStructure(gapit_code) {
         // Create a copy of gapit_code for storing results.
         //
@@ -271,6 +305,9 @@ module.exports = function (RED) {
         nodeContext.set("nonexistent_oids", Array());
 
         this.processVarbinds = function (msg, varbinds) {
+            // parse Counter64 values in varbinds
+            varbinds = varbindsConvertCounter64BuffersToNumbers(varbinds);
+
             // get result structure
             var gapit_results = getGapitCodeResultsStructure(msg.gapit_code);
 
