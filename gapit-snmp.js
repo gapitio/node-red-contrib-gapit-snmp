@@ -211,8 +211,6 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         this.config = config;
         this.multi_device_separator = ";";
-        this.community = config.community;
-        this.host = config.host;
         this.version = (config.version === "2c") ? snmp.Version2c : snmp.Version1;
         this.tagname_device_name = config.tagname_device_name.trim();
         this.tagvalue_device_name = config.tagvalue_device_name.trim();
@@ -534,8 +532,8 @@ module.exports = function (RED) {
         this.on("input", function (msg) {
             node.readNonExistentOids();
 
-            var host = node.host || msg.host;
-            var community = node.community || msg.community;
+            var host = node.config.host || msg.host;
+            var community = node.config.community || msg.community;
             // deep copy gapit_code, so this variable can be modified without affecting config object
             msg.gapit_code = JSON.parse(JSON.stringify(node.config.gapit_code || msg.gapit_code));
 
