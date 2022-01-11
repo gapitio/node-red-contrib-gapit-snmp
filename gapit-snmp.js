@@ -529,6 +529,43 @@ module.exports = function (RED) {
             return oids;
         }
 
+        this.snmpGetIndividualOids = function (host, community, oids, msg) {
+            // Query OIDs individually
+            // Workaround for SNMPv1 queries failing if one or more OIDS
+            // don't exist.
+
+            msg.v1QueryCount = oids.length;
+            msg.v1ResponseCount = 0;
+            msg.v1Varbinds = Array();
+            for (const oid of oids) {
+                console.debug(`SNMPv1 single-OID query for '${oid}'`);
+                getSession(host, community, node.version, node.timeout).get([oid], function (singleQueryError, singleQueryVarbinds) {
+                    msg.v1ResponseCount += 1;
+                    console.debug(`Got SNMPv1 single-OID response #${msg.v1ResponseCount} of ${msg.v1QueryCount}`);
+                    if (singleQueryError) {
+                        if((singleQueryError.name == "RequestFailedError") && (singleQueryError.status == snmp.ErrorStatus.NoSuchName)) {
+                            node.warn(`SNMPv1 single-OID query: OID '${oid}' is not present`);
+                            node.addNonExistentOid(oid);
+                        }
+                        else {
+                            node.error(`SNMPv1 single-OID request error: ${singleQueryError.toString()}`);
+                        }
+                    }
+                    else {
+                        //node.processVarbinds(msg, v1Varbinds);
+                        console.debug(`Got result for SNMPv1 single-OID query for OID '${oid}'`);
+                        msg.v1Varbinds.push(singleQueryVarbinds[0]);
+                    }
+                    if (msg.v1ResponseCount === msg.v1QueryCount) {
+                        console.debug("Got responses for all SNMPv1 single-OID queries, processing results");
+                        node.processVarbinds(msg, msg.v1Varbinds);
+                    }
+                });
+
+                node.persistNonExistentOids();
+            }
+        }
+
         this.snmpGet = function (host, community, oids, msg) {
             getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
                 if (error) {
@@ -540,37 +577,7 @@ module.exports = function (RED) {
                         // A single "missing" OID causes an SNMPv1 query to fail, 
                         // query OIDs one by one as a workaround
                         node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
-
-                        msg.v1QueryCount = oids.length;
-                        msg.v1ResponseCount = 0;
-                        msg.v1Varbinds = Array();
-                        for (const oid of oids) {
-                            console.debug(`SNMPv1 single-OID query for '${oid}'`);
-                            getSession(host, community, node.version, node.timeout).get([oid], function (singleQueryError, singleQueryVarbinds) {
-                                msg.v1ResponseCount += 1;
-                                console.debug(`Got SNMPv1 single-OID response #${msg.v1ResponseCount} of ${msg.v1QueryCount}`);
-                                if (singleQueryError) {
-                                    if((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
-                                        node.warn(`SNMPv1 single-OID query: OID '${oid}' is not present`);
-                                        node.addNonExistentOid(oid);
-                                    }
-                                    else {
-                                        node.error(`SNMPv1 single-OID request error: ${singleQueryError.toString()}`);
-                                    }
-                                }
-                                else {
-                                    //node.processVarbinds(msg, v1Varbinds);
-                                    console.debug(`Got result for SNMPv1 single-OID query for OID '${oid}'`);
-                                    msg.v1Varbinds.push(singleQueryVarbinds[0]);
-                                }
-                                if (msg.v1ResponseCount === msg.v1QueryCount) {
-                                    console.debug("Got responses for all SNMPv1 single-OID queries, processing results");
-                                    node.processVarbinds(msg, msg.v1Varbinds);
-                                }
-                            });
-
-                            node.persistNonExistentOids();
-                        }
+                        node.snmpGetIndividualOids(host, community, oids, msg);
                     }
                     else {
                         node.error("Request error: " + error.toString(), msg);
