@@ -432,22 +432,7 @@ module.exports = function (RED) {
             }
         }
 
-        this.on("input", function (msg) {
-            node.readNonExistentOids();
-
-            var host = node.host || msg.host;
-            var community = node.community || msg.community;
-            // deep copy gapit_code, so this variable can be modified without affecting config object
-            msg.gapit_code = JSON.parse(JSON.stringify(node.config.gapit_code || msg.gapit_code));
-
-            // if multiple minions are specified, verify that the 
-            // number of device names matches the number of minions
-            if (node.minion_ids.length > 0 && node.minion_ids.length != node.device_names.length) {
-                node.error("'Device name' and 'Minion IDs' must contain the same number of items");
-                // node.error() should break the flow, but... no?
-                return;
-            }
-
+        this.expandGapitCodeForMinions = function (msg) {
             // expand config to support querying for multiple minions.
             // modify gapit_config to have device_name as key, in place of "objects", 
             // with one copy of config per device_name.
@@ -481,9 +466,11 @@ module.exports = function (RED) {
                 console.debug("Removing original gapit_code['objects']");
                 delete msg.gapit_code["objects"];
             }
+        }
 
-            // initialize next_read (set 0) if not present
+        this.getNextRead = function (msg) {
             var next_read = nodeContext.get("next_read");
+            // initialize next_read (set 0) if not present
             if (next_read === undefined) {
                 console.debug("no next_read in context, initializing variable");
                 next_read = Object();
@@ -497,7 +484,11 @@ module.exports = function (RED) {
                 }
             }
 
-            // build list of OIDs
+            return next_read;
+        }
+
+        this.getOidsToQuery = function (msg) {
+            var next_read = node.getNextRead(msg);
             var oids = Array()
             for (const [groups_key, groups] of Object.entries(msg.gapit_code)) {
                 for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
@@ -536,6 +527,30 @@ module.exports = function (RED) {
 
             // save next_read to context
             nodeContext.set("next_read", next_read);
+
+            return oids;
+        }
+
+        this.on("input", function (msg) {
+            node.readNonExistentOids();
+
+            var host = node.host || msg.host;
+            var community = node.community || msg.community;
+            // deep copy gapit_code, so this variable can be modified without affecting config object
+            msg.gapit_code = JSON.parse(JSON.stringify(node.config.gapit_code || msg.gapit_code));
+
+            // if multiple minions are specified, verify that the 
+            // number of device names matches the number of minions
+            if (node.minion_ids.length > 0 && node.minion_ids.length != node.device_names.length) {
+                node.error("'Device name' and 'Minion IDs' must contain the same number of items");
+                // node.error() should break the flow, but... no?
+                return;
+            }
+
+            node.expandGapitCodeForMinions(msg);
+
+            // build list of OIDs
+            var oids = node.getOidsToQuery(msg)
 
             if (oids.length > 0) {
                 getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
