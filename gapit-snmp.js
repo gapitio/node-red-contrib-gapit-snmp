@@ -485,26 +485,50 @@ module.exports = function (RED) {
             return next_read;
         }
 
-        this.getOidsToQuery = function (msg) {
+        this.skipGroupThisRead = function (msg, groups_key, group_idx) {
+            // check if this group should be skipped for this read, 
+            // according to next_read
             var next_read = node.getNextRead(msg);
+            var group_name = msg.gapit_code[groups_key][group_idx]["group_name"];
+            var read_priority = msg.gapit_code[groups_key][group_idx]["read_priority"];
+            var ts = Math.trunc(new Date().valueOf() / 1000);
+
+            if (ts < next_read[groups_key][group_name] || read_priority == "n") {
+                if (ts < next_read[groups_key][group_name]) {
+                    var next_read_time = new Date(next_read[groups_key][group_name] * 1000).toLocaleTimeString();
+                    console.debug(`Skipping group '${group_name}' until next_read time (${next_read_time})`);
+                }
+                else if (groups[group_idx]["read_priority"] == "n") {
+                    console.debug(`Skipping ${group_name}, read_priority == "n"`);
+                }
+                return true;
+            }
+            // default
+            return false;
+        }
+
+        this.setNextReadForGroup = function (msg, groups_key, group_idx) {
+            // set next_read
+            var next_read = node.getNextRead(msg);
+            var group_name = msg.gapit_code[groups_key][group_idx]["group_name"];
+            var read_priority = msg.gapit_code[groups_key][group_idx]["read_priority"];
+            var ts = Math.trunc(new Date().valueOf() / 1000);
+            next_read[groups_key][group_name] = ts + read_priority;
+            // save next_read to context
+            nodeContext.set("next_read", next_read);
+        }
+
+        this.getOidsToQuery = function (msg) {
             var oids = Array()
             for (const [groups_key, groups] of Object.entries(msg.gapit_code)) {
                 for (var group_idx = 0; group_idx < groups.length; group_idx++) { 
                     var group_name = groups[group_idx]["group_name"];
 
-                    var ts = Math.trunc(new Date().valueOf() / 1000);
-                    if (ts < next_read[groups_key][group_name] || groups[group_idx]["read_priority"] == "n") {
-                        if (ts < next_read[groups_key][group_name]) {
-                            var next_read_time = new Date(next_read[groups_key][group_name] * 1000).toLocaleTimeString();
-                            console.debug(`Skipping group '${group_name}' until next_read time (${next_read_time})`);
-                        }
-                        else if (groups[group_idx]["read_priority"] == "n") {
-                            console.debug(`Skipping ${group_name}, read_priority == "n"`);
-                        }
+                    if (node.skipGroupThisRead(msg, groups_key, group_idx)) {
                         continue;
                     }
 
-                    next_read[groups_key][group_name] = ts + groups[group_idx]["read_priority"];
+                    node.setNextReadForGroup(msg, groups_key, group_idx);
                     console.info("Getting OIDs from group '" + group_name + "'");
                     for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                         var oid = groups[group_idx]["group"][member_idx]["address"];
@@ -522,9 +546,6 @@ module.exports = function (RED) {
                     }
                 }
             };
-
-            // save next_read to context
-            nodeContext.set("next_read", next_read);
 
             return oids;
         }
