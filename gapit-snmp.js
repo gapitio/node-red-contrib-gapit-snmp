@@ -499,7 +499,7 @@ module.exports = function (RED) {
                     console.debug(`Skipping group '${group_name}' until next_read time (${next_read_time})`);
                 }
                 else if (groups[group_idx]["read_priority"] == "n") {
-                    console.debug(`Skipping ${group_name}, read_priority == "n"`);
+                    console.debug(`Skipping group '${group_name}', read_priority == "n"`);
                 }
                 return true;
             }
