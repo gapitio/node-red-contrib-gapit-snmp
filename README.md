@@ -87,8 +87,7 @@ Run the following command in your Node-RED user directory - typically `~/.node-r
 and then restart Node-RED.
 
 
-Usage
------
+## Usage
 
 ### Example flow
 
@@ -103,7 +102,6 @@ The node needs to be configured with, at a minimum:
 * SNMP config (host, community, etc.)
 * Gapit code
 
-#### Parameters
 | Parameter | Description |
 | ------ | ------ |
 | Name | Node name |
