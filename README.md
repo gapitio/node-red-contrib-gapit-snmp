@@ -75,7 +75,7 @@ You need to refresh your browser for the `gapit-results-to-influx-batch`
 node to be available in the node palette. If you are running Node-RED 1.2 
 or older, you will need to restart Node-RED for it to be visible.
 
-If you are an ancient version of NPM, you will need to manually install 
+If you are using an ancient version of NPM, you will need to manually install 
 `node-red-contrib-gapit-results`.
 
 ### Install using the command line
@@ -99,7 +99,7 @@ This is the JSON for the flow pictured above.
 
 ### Gapit codes
 
-A library of ready-made *gapit codes* is forthcoming.
+A library of ready-made *Gapit codes* is forthcoming.
 
 ### gapit-snmp
 
