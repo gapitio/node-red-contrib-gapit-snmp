@@ -1,0 +1,30 @@
+{
+    "name"          : "@gapit/node-red-contrib-gapit-snmp",
+    "version"       : "0.0.6",
+    "description"   : "A Node-RED node which gets SNMP OIDs based on the gapit code JSON schema.",
+    "dependencies"  : {
+        "net-snmp"  : "~3.5.8" 
+    },
+    "repository" : {
+        "type":"git",
+        "url":"https://github.com/gapitio/node-red-contrib-gapit-snmp.git"
+    },
+    "license": "Apache-2.0",
+    "keywords": [ "node-red", "snmp", "oid", "gapit" ],
+    "node-red": {
+        "nodes": {
+            "gapit-snmp": "gapit-snmp.js", 
+            "gapit-results-to-influx-batch": "gapit-results.js"
+        }
+    },
+    "author": {
+        "name": "Sverre Johan Tøvik",
+        "email": "sjt@gapit.io",
+        "url": "https://gapit.io"
+    },
+    "contributors": [
+        { 
+            "name": "Dave Conway-Jones" 
+        }
+    ]
+}
