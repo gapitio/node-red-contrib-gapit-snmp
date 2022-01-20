@@ -33,7 +33,6 @@ module.exports = function (RED) {
         // https://discourse.nodered.org/t/snmp-access-problem/45990/9
 
         // deep copy, to not modify the original object
-        // to deep copy or not... remove deep copy _and_ "return"
         let resultVarbinds = JSON.parse(JSON.stringify(varbinds));
         for (const varbind of resultVarbinds) {
             // ignore other data types
@@ -287,11 +286,6 @@ module.exports = function (RED) {
             }
         }
 
-        /*console.log("### db_tags:");
-        for (const [key, val] of Object.entries(this.db_tags)) {
-            console.debug("   " + key + ": " + val);
-        }*/
-
         this.scaler = new Scaling(this.scaling);
 
         var node = this;
@@ -316,7 +310,6 @@ module.exports = function (RED) {
                         varbinds[i].type == snmp.ObjectType.NoSuchObject) {
                         // example code uses snmp.ErrorStatus.NoSuchInstance, 
                         // but it is actually snmp.ObjectType.NoSuchInstance
-                        // node.warn("SNMPv2+ error: " + snmp.varbindError(varbinds[i]), msg);
                         node.warn("OID '" + varbinds[i]["oid"] + "' is not present")
                         // remove varbinds with these errors, instead of throwing an error
                         // build list of indexes to delete after iteration is complete
@@ -385,9 +378,6 @@ module.exports = function (RED) {
 
             msg.db_tags = node.db_tags;
             msg.custom_tags = node.custom_tags;
-            // hmf... msg.device_names? no, add in result2influx..?
-            // customtags added "raw"? result2influx can map by device_name
-            //msg.device_name_to_minion_id = node.device_name_to_minion_id;
             msg.tagname_device_name = node.tagname_device_name;
             msg.varbinds = varbinds;
             msg.oid_value_map = oid_value_map;
@@ -573,7 +563,6 @@ module.exports = function (RED) {
                         }
                     }
                     else {
-                        //node.processVarbinds(msg, v1Varbinds);
                         console.debug(`Got result for SNMPv1 single-OID query for OID '${oid}'`);
                         msg.v1Varbinds.push(singleQueryVarbinds[0]);
                     }
@@ -620,7 +609,6 @@ module.exports = function (RED) {
             // number of device names matches the number of minions
             if (node.minion_ids.length > 0 && node.minion_ids.length != node.device_names.length) {
                 node.error("'Device name' and 'Minion IDs' must contain the same number of items");
-                // node.error() should break the flow, but... no?
                 return;
             }
 
