@@ -613,8 +613,6 @@ module.exports = function (RED) {
         this.on("input", function (msg) {
             node.readNonExistentOids();
 
-            var host = node.config.host || msg.host;
-            var community = node.config.community || msg.community;
             // deep copy gapit_code, so this variable can be modified without affecting config object
             msg.gapit_code = JSON.parse(JSON.stringify(node.config.gapit_code || msg.gapit_code));
 
@@ -632,7 +630,7 @@ module.exports = function (RED) {
             var oids = node.getOidsToQuery(msg)
 
             if (oids.length > 0) {
-                node.snmpGet(host, community, oids, msg);
+                node.snmpGet(node.config.host, node.config.community, oids, msg);
             }
             else {
                 node.warn("No oid(s) to search for");
