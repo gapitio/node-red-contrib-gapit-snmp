@@ -10,7 +10,7 @@ node transforms the output of this node to the format required by the
 So to fetch a standard set of data and insert it into InfluxDB, a flow 
 like this is all you need:
 
-![ExampleFlow](images/example_flow.png)
+![Example Flow](images/example_flow.png)
 
 Here's a fragment of a *Gapit code* for UPSes:
 

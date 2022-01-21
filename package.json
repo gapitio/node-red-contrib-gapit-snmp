@@ -1,10 +1,10 @@
 {
     "name"          : "@gapit/node-red-contrib-gapit-snmp",
-    "version"       : "0.0.7",
+    "version"       : "0.1.0",
     "description"   : "A Node-RED node which gets SNMP OIDs based on the gapit code JSON schema.",
     "dependencies"  : {
         "net-snmp"  : "~3.5.8", 
-        "@gapit/node-red-contrib-gapit-results": "~0.0.3"
+        "@gapit/node-red-contrib-gapit-results": "~0.1.0"
     },
     "repository" : {
         "type":"git",
