@@ -32,9 +32,7 @@ module.exports = function (RED) {
         // Based on code from 
         // https://discourse.nodered.org/t/snmp-access-problem/45990/9
 
-        // deep copy, to not modify the original object
-        let resultVarbinds = JSON.parse(JSON.stringify(varbinds));
-        for (const varbind of resultVarbinds) {
+        for (const varbind of varbinds) {
             // ignore other data types
             if(varbind.type !== snmp.ObjectType.Counter64) continue;
             
@@ -48,7 +46,6 @@ module.exports = function (RED) {
             varbind.value = Number(bigBuffer.readBigInt64BE());
         }
 
-        return resultVarbinds;
     }
 
 
@@ -298,7 +295,7 @@ module.exports = function (RED) {
 
         this.processVarbinds = function (msg, varbinds) {
             // parse Counter64 values in varbinds
-            varbinds = varbindsConvertCounter64BuffersToNumbers(varbinds);
+            varbindsConvertCounter64BuffersToNumbers(varbinds);
 
             // get result structure
             var gapit_results = getGapitCodeResultsStructure(msg.gapit_code);
