@@ -101,7 +101,7 @@ module.exports = function (RED) {
 
 
     class Scaling {
-        constructor(name) {
+        constructor(name, convertBigintToNumber=true) {
             // set use_scaling to requested scaling
             var scaling_func = "_scaling_" + name;
             if (this[scaling_func] === undefined) {
@@ -117,6 +117,7 @@ module.exports = function (RED) {
                 console.debug("Calling init for scaling '" + name + "'")
                 this[scaling_init_func]();
             }
+            this.convertBigintToNumber = convertBigintToNumber;
         }
 
         _init_scaling_schleifenbauer() {
@@ -131,6 +132,22 @@ module.exports = function (RED) {
                 // cast to string with 8 decimals, and convert back to number
                 // this is to avoid numbers like 49.900000000000006 (from 499 * 0.1)
                 var result = Number((value * scaling_factor).toFixed(8));
+                console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
+                return result
+            }
+            else if (typeof value === "bigint" && typeof scaling_factor === "number" && scaling_factor != 1) {
+                if (scaling_factor < 1) {
+                    // a BigInt can't be multiplied with a fractional number, 
+                    // so flip (1/n) the scaling_factor and divide instead
+                    var result = value / BigInt(1/scaling_factor);
+                }
+                else {
+                    // scaling_factor > 1
+                    var result = value * BigInt(scaling_factor);
+                }
+                if (this.convertBigintToNumber && result < Number.MAX_SAFE_INTEGER) {
+                    result = Number(result);
+                }
                 console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
                 return result
             }
@@ -151,6 +168,21 @@ module.exports = function (RED) {
                 // cast to string with 8 fixed decimals, and convert back to number
                 // this to avoid numbers like 49.900000000000006
                 var result = Number((value * scaling_factor).toFixed(8));
+                console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
+            }
+            else if (typeof value === "bigint" && typeof scaling_factor === "number" && scaling_factor != 1) {
+                if (scaling_factor < 1) {
+                    // a BigInt can't be multiplied with a fractional number, 
+                    // so flip (1/n) the scaling_factor and divide instead
+                    var result = value / BigInt(1/scaling_factor);
+                }
+                else {
+                    // scaling_factor > 1
+                    var result = value * BigInt(scaling_factor);
+                }
+                if (this.convertBigintToNumber && result < Number.MAX_SAFE_INTEGER) {
+                    result = Number(result);
+                }
                 console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
             }
             else if (scaling_factor == 1) {
@@ -299,7 +331,7 @@ module.exports = function (RED) {
             }
         }
 
-        this.scaler = new Scaling(this.scaling);
+        this.scaler = new Scaling(this.scaling, this.config.convert_counter64_bigint_to_number);
 
         var node = this;
 
