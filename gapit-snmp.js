@@ -19,7 +19,7 @@ module.exports = function (RED) {
     }
 
 
-    function varbindsConvertCounter64BuffersToNumbers(varbinds) {
+    function varbindsParseCounter64Buffers(varbinds, convertToNumbers=true) {
         // Counter64 is not directly supported by net-snmp, 
         // but returned as a buffer (array). This function 
         // converts any Counter64 buffers in a varbinds object 
@@ -31,21 +31,37 @@ module.exports = function (RED) {
         //
         // Based on code from 
         // https://discourse.nodered.org/t/snmp-access-problem/45990/9
+        //
+        // If convertToNumbers is set, the BigInt is converted 
+        // to Number (if possible).
 
         for (const varbind of varbinds) {
             // ignore other data types
             if(varbind.type !== snmp.ObjectType.Counter64) continue;
             
-            // can't use varbind.value directly, because it's modified 
-            // by the deep copy (by way of JSON) of varbinds
-            let inputBuffer = Buffer.from(varbind.value);
+            let inputBuffer = varbind.value;
+
+            // Counter64 is unsigned, but the underlying ASN.1 
+            // integer in SNMP is signed, so a "full" Counter64 
+            // will be represented by 9 bytes. Remove the leading 
+            // (sign) byte in this case.
+            if (inputBuffer.length == 9) {
+                inputBuffer = inputBuffer.slice(1);
+            }
+
             // pad and parse buffer
             let padBuffer = Buffer.alloc(8 - inputBuffer.length);
             let bigBuffer = Buffer.concat([padBuffer, inputBuffer]);
             varbind.bufferValue = varbind.value
-            varbind.value = Number(bigBuffer.readBigInt64BE());
-        }
 
+            let big = bigBuffer.readBigUInt64BE();
+            if (convertToNumbers && big < Number.MAX_SAFE_INTEGER) {
+                varbind.value = Number(big);
+            }
+            else {
+                varbind.value = big;
+            }
+        }
     }
 
 
@@ -295,7 +311,7 @@ module.exports = function (RED) {
 
         this.processVarbinds = function (msg, varbinds) {
             // parse Counter64 values in varbinds
-            varbindsConvertCounter64BuffersToNumbers(varbinds);
+            varbindsParseCounter64Buffers(varbinds, node.config.convert_counter64_bigint_to_number);
 
             // get result structure
             var gapit_results = getGapitCodeResultsStructure(msg.gapit_code);
