@@ -126,10 +126,8 @@ module.exports = function (RED) {
             // these are lazy initialized when the first register of a 
             // field_name is used
         }
-        
-        _scaling_general(value, scaling_factor, unit, field_name) {
-            console.debug(`Applying scaling to value ${value} with scaling factor ${scaling_factor}`);
 
+        simple_scaling(value, scaling_factor, unit, field_name) {
             if ((typeof value !== "number" && typeof value !== "bigint") || typeof scaling_factor !== "number" || scaling_factor == 1) {
                 if (scaling_factor == 1) {
                     console.debug("scaling_factor == 1, returning unchanged value");
@@ -164,39 +162,15 @@ module.exports = function (RED) {
                 return result;
             }
         }
+        
+        _scaling_general(value, scaling_factor, unit, field_name) {
+            console.debug(`Applying scaling to value ${value} with scaling factor ${scaling_factor}`);
+            return this.simple_scaling(value, scaling_factor, unit, field_name);
+        }
 
         _scaling_schleifenbauer(value, scaling_factor, unit, field_name) {
             console.debug(`Decoding Schleifenbauer with value ${value} and scaling factor ${scaling_factor}`);
-
-            if (typeof value === "number" && typeof scaling_factor === "number" && scaling_factor != 1) {
-                // cast to string with 8 fixed decimals, and convert back to number
-                // this to avoid numbers like 49.900000000000006
-                var result = Number((value * scaling_factor).toFixed(8));
-                console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
-            }
-            else if (typeof value === "bigint" && typeof scaling_factor === "number" && scaling_factor != 1) {
-                if (scaling_factor < 1) {
-                    // a BigInt can't be multiplied with a fractional number, 
-                    // so flip (1/n) the scaling_factor and divide instead
-                    var result = value / BigInt(1/scaling_factor);
-                }
-                else {
-                    // scaling_factor > 1
-                    var result = value * BigInt(scaling_factor);
-                }
-                if (this.convertBigintToNumber && result < Number.MAX_SAFE_INTEGER) {
-                    result = Number(result);
-                }
-                console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
-            }
-            else if (scaling_factor == 1) {
-                console.warn("scaling_factor == 1, returning unchanged value");
-                return value;
-            }
-            else {
-                console.warn("Value or scaling_factor is not a number, returning unchanged value")
-                return value;
-            }
+            result = this.simple_scaling(value, scaling_factor, unit, field_name);
 
             if (unit.startsWith("register")) {
                 // this is a register1/2/3 field
