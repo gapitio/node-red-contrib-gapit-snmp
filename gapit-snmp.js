@@ -127,6 +127,26 @@ module.exports = function (RED) {
             // field_name is used
         }
 
+        factorToDivisorInt(factor) {
+            // turn a factor into a divisor, 
+            // _if_ it turns out an integer
+            // otherwise, return 1
+            let divisor = 1 / factor;
+            if (Math.ceil(divisor) != divisor) {
+                // floating-point arithmetic handling
+                // 1/0.0001  == 10000
+                // 1/0.00001 == 99999.99999... - ceil to get the expected 100000
+                if (String(Math.ceil(divisor)).endsWith('000')) {
+                    console.debug('Divisor must be ceil\'ed, but assumed safe');
+                    divisor = Math.ceil(divisor);
+                }
+                else {
+                    divisor = 1;
+                }
+            }
+            return divisor;
+        }
+
         simple_scaling(value, scaling_factor, unit, field_name) {
             if ((typeof value !== "number" && typeof value !== "bigint") || typeof scaling_factor !== "number" || scaling_factor == 1) {
                 if (scaling_factor == 1) {
@@ -149,7 +169,12 @@ module.exports = function (RED) {
                 if (scaling_factor < 1) {
                     // a BigInt can't be multiplied with a fractional number, 
                     // so flip (1/n) the scaling_factor and divide instead
-                    var result = value / BigInt(1/scaling_factor);
+                    let divisor = this.factorToDivisorInt(scaling_factor);
+                    if (divisor == 1) {
+                        console.error(`Factor ${scaling_factor} cannot be turned into an (integer) divisor for use with BigInt, returning unchanged value`);
+                        return value;
+                    }
+                    var result = value / BigInt(divisor);
                 }
                 else {
                     // scaling_factor > 1
