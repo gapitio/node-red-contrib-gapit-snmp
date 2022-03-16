@@ -19,7 +19,7 @@ module.exports = function (RED) {
     }
 
 
-    function varbindsConvertCounter64BuffersToNumbers(varbinds) {
+    function varbindsParseCounter64Buffers(varbinds, convertToNumbers=true) {
         // Counter64 is not directly supported by net-snmp, 
         // but returned as a buffer (array). This function 
         // converts any Counter64 buffers in a varbinds object 
@@ -31,24 +31,37 @@ module.exports = function (RED) {
         //
         // Based on code from 
         // https://discourse.nodered.org/t/snmp-access-problem/45990/9
+        //
+        // If convertToNumbers is set, the BigInt is converted 
+        // to Number (if possible).
 
-        // deep copy, to not modify the original object
-        let resultVarbinds = JSON.parse(JSON.stringify(varbinds));
-        for (const varbind of resultVarbinds) {
+        for (const varbind of varbinds) {
             // ignore other data types
             if(varbind.type !== snmp.ObjectType.Counter64) continue;
             
-            // can't use varbind.value directly, because it's modified 
-            // by the deep copy (by way of JSON) of varbinds
-            let inputBuffer = Buffer.from(varbind.value);
+            let inputBuffer = varbind.value;
+
+            // Counter64 is unsigned, but the underlying ASN.1 
+            // integer in SNMP is signed, so a "full" Counter64 
+            // will be represented by 9 bytes. Remove the leading 
+            // (sign) byte in this case.
+            if (inputBuffer.length == 9) {
+                inputBuffer = inputBuffer.slice(1);
+            }
+
             // pad and parse buffer
             let padBuffer = Buffer.alloc(8 - inputBuffer.length);
             let bigBuffer = Buffer.concat([padBuffer, inputBuffer]);
             varbind.bufferValue = varbind.value
-            varbind.value = Number(bigBuffer.readBigInt64BE());
-        }
 
-        return resultVarbinds;
+            let big = bigBuffer.readBigUInt64BE();
+            if (convertToNumbers && big < Number.MAX_SAFE_INTEGER) {
+                varbind.value = Number(big);
+            }
+            else {
+                varbind.value = big;
+            }
+        }
     }
 
 
@@ -88,7 +101,7 @@ module.exports = function (RED) {
 
 
     class Scaling {
-        constructor(name) {
+        constructor(name, convertBigintToNumber=true) {
             // set use_scaling to requested scaling
             var scaling_func = "_scaling_" + name;
             if (this[scaling_func] === undefined) {
@@ -104,6 +117,7 @@ module.exports = function (RED) {
                 console.debug("Calling init for scaling '" + name + "'")
                 this[scaling_init_func]();
             }
+            this.convertBigintToNumber = convertBigintToNumber;
         }
 
         _init_scaling_schleifenbauer() {
@@ -112,42 +126,76 @@ module.exports = function (RED) {
             // these are lazy initialized when the first register of a 
             // field_name is used
         }
-        
-        _scaling_general(value, scaling_factor, unit, field_name) {
-            if (typeof value === "number" && typeof scaling_factor === "number" && scaling_factor != 1) {
+
+        factorToDivisorInt(factor) {
+            // turn a factor into a divisor, 
+            // _if_ it turns out an integer
+            // otherwise, return 1
+            let divisor = 1 / factor;
+            if (Math.ceil(divisor) != divisor) {
+                // floating-point arithmetic handling
+                // 1/0.0001  == 10000
+                // 1/0.00001 == 99999.99999... - ceil to get the expected 100000
+                if (String(Math.ceil(divisor)).endsWith('000')) {
+                    console.debug('Divisor must be ceil\'ed, but assumed safe');
+                    divisor = Math.ceil(divisor);
+                }
+                else {
+                    divisor = 1;
+                }
+            }
+            return divisor;
+        }
+
+        simple_scaling(value, scaling_factor, unit, field_name) {
+            if ((typeof value !== "number" && typeof value !== "bigint") || typeof scaling_factor !== "number" || scaling_factor == 1) {
+                if (scaling_factor == 1) {
+                    console.debug("scaling_factor == 1, returning unchanged value");
+                }
+                else {
+                    console.debug("Value or scaling_factor is not a number, returning unchanged value");
+                }
+                return value;
+            }
+
+            if (typeof value === "number") {
                 // cast to string with 8 decimals, and convert back to number
                 // this is to avoid numbers like 49.900000000000006 (from 499 * 0.1)
                 var result = Number((value * scaling_factor).toFixed(8));
                 console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
-                return result
+                return result;
             }
-            else if (scaling_factor == 1) {
-                console.warn("scaling_factor == 1, returning unchanged value");
-                return value;
+            else if (typeof value === "bigint") {
+                if (scaling_factor < 1) {
+                    // a BigInt can't be multiplied with a fractional number, 
+                    // so flip (1/n) the scaling_factor and divide instead
+                    let divisor = this.factorToDivisorInt(scaling_factor);
+                    if (divisor == 1) {
+                        console.error(`Factor ${scaling_factor} cannot be turned into an (integer) divisor for use with BigInt, returning unchanged value`);
+                        return value;
+                    }
+                    var result = value / BigInt(divisor);
+                }
+                else {
+                    // scaling_factor > 1
+                    var result = value * BigInt(scaling_factor);
+                }
+                if (this.convertBigintToNumber && result < Number.MAX_SAFE_INTEGER) {
+                    result = Number(result);
+                }
+                console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
+                return result;
             }
-            else {
-                console.warn("Value or scaling_factor is not a number, returning unchanged value")
-                return value;
-            }
+        }
+        
+        _scaling_general(value, scaling_factor, unit, field_name) {
+            console.debug(`Applying scaling to value ${value} with scaling factor ${scaling_factor}`);
+            return this.simple_scaling(value, scaling_factor, unit, field_name);
         }
 
         _scaling_schleifenbauer(value, scaling_factor, unit, field_name) {
             console.debug(`Decoding Schleifenbauer with value ${value} and scaling factor ${scaling_factor}`);
-
-            if (typeof value === "number" && typeof scaling_factor === "number" && scaling_factor != 1) {
-                // cast to string with 8 fixed decimals, and convert back to number
-                // this to avoid numbers like 49.900000000000006
-                var result = Number((value * scaling_factor).toFixed(8));
-                console.debug(`Applied scaling to value ${value} with factor ${scaling_factor}, for result ${result}`);
-            }
-            else if (scaling_factor == 1) {
-                console.warn("scaling_factor == 1, returning unchanged value");
-                return value;
-            }
-            else {
-                console.warn("Value or scaling_factor is not a number, returning unchanged value")
-                return value;
-            }
+            var result = this.simple_scaling(value, scaling_factor, unit, field_name);
 
             if (unit.startsWith("register")) {
                 // this is a register1/2/3 field
@@ -286,7 +334,7 @@ module.exports = function (RED) {
             }
         }
 
-        this.scaler = new Scaling(this.scaling);
+        this.scaler = new Scaling(this.scaling, this.config.convert_counter64_bigint_to_number);
 
         var node = this;
 
@@ -298,7 +346,7 @@ module.exports = function (RED) {
 
         this.processVarbinds = function (msg, varbinds) {
             // parse Counter64 values in varbinds
-            varbinds = varbindsConvertCounter64BuffersToNumbers(varbinds);
+            varbindsParseCounter64Buffers(varbinds, node.config.convert_counter64_bigint_to_number);
 
             // get result structure
             var gapit_results = getGapitCodeResultsStructure(msg.gapit_code);

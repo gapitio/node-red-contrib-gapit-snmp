@@ -48,6 +48,12 @@
         <label for="node-input-remove_novalue_items_from_gapit_results"><i class="fa fa-remove"></i> Remove items with no value from gapit_results</label>
         <input type="checkbox" id="node-input-remove_novalue_items_from_gapit_results" />
     </div>
+
+    <div class="form-row">
+        <label for="node-input-convert_counter64_bigint_to_number"><i class="fa fa-remove"></i> Convert Counter64 BigInt to Number if possible</label>
+        <input type="checkbox" id="node-input-convert_counter64_bigint_to_number" />
+    </div>
+
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
@@ -67,6 +73,16 @@
             Add database tags, formatted as JSON with tag_name: value. If multiple 
             minions are specified, tags must be in a child object named for the device 
             name, or "all-minion-tags" for any tags that should be common for all minions.
+        </p>
+        <p>
+            <b>Counter64 notes</b><br />
+            Conversion from BigInt to Number is attempted by default. (Only numbers which 
+            are small enough to be represented as a JavaScript Number are converted.) 
+            InfluxDB 2 has a UInteger type (64-bit unsigned), but this is not supported by 
+            <i>node-red-contrib-influxdb</i> (as of v0.6.1). If you are using something 
+            other than InfluxDB (or a future version of <i>node-red-contrib-influxdb</i> 
+            where this works), you may want to uncheck 
+            *Convert Counter64 BigInt to Number if possible*.
         </p>
     </div>
 </script>
@@ -95,6 +111,7 @@
             scaling: { value: "general" },
             skip_nonexistent_oids: { value: true },
             remove_novalue_items_from_gapit_results: { value: true },
+            convert_counter64_bigint_to_number: { value: true },
             timeout: { value: 5 },
             name: { value: "" }
         },
