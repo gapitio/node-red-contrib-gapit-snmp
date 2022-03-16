@@ -195,7 +195,7 @@ module.exports = function (RED) {
 
         _scaling_schleifenbauer(value, scaling_factor, unit, field_name) {
             console.debug(`Decoding Schleifenbauer with value ${value} and scaling factor ${scaling_factor}`);
-            result = this.simple_scaling(value, scaling_factor, unit, field_name);
+            var result = this.simple_scaling(value, scaling_factor, unit, field_name);
 
             if (unit.startsWith("register")) {
                 // this is a register1/2/3 field
