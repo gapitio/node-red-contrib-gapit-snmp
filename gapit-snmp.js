@@ -637,6 +637,16 @@ module.exports = function (RED) {
                         node.warn(`Still tooBig, trying again with ${blockSize} OIDs`);
                         node.tuneSnmpBlockSize(host, community, oids, msg, blockSize);
                     }
+                    else if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
+                        // As soon as tooBig is no longer triggered, this error
+                        // may occur.
+                        //
+                        // SNMPv1 NoSuchName
+                        // A single "missing" OID causes an SNMPv1 query to fail, 
+                        // query OIDs one by one as a workaround
+                        node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
+                        node.snmpGetIndividualOids(host, community, oids, msg);
+                    }
                     else {
                         node.error("Request error: " + error.toString(), msg);
                     }
