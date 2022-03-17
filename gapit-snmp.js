@@ -428,7 +428,6 @@ module.exports = function (RED) {
             msg.db_tags = node.db_tags;
             msg.custom_tags = node.custom_tags;
             msg.tagname_device_name = node.tagname_device_name;
-            msg.varbinds = varbinds;
             msg.oid_value_map = oid_value_map;
             msg.gapit_results = gapit_results;
             node.send(msg);
@@ -653,45 +652,71 @@ module.exports = function (RED) {
                 }
                 else {
                     console.info(`Found working block size to work around SNMP tooBig error: ${blockSize} OIDs`);
-                    // For testing, remove always-failing (in simulator) oid from list.
-                    // oids.splice(oids.indexOf("1.3.6.1.4.1.534.1.9.7.0"), 1);
-                    // 
-                    // node.snmpGetByBlock(host, community, oids, msg, blockSize);
-                    // node.getBlockSize = blockSize;
+                    node.getBlockSize = blockSize;
+                    node.snmpGet(host, community, oids, msg);
                 }
             });
         }
 
         this.snmpGet = function (host, community, oids, msg) {
-            getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
-                if (error) {
-                    // error object has .name, .message and, optionally, .status
-                    // error.status is only set for RequestFailed, so check
-                    // that it's this error before checking the value of .status
-                    if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
-                        // SNMPv1 NoSuchName
-                        // A single "missing" OID causes an SNMPv1 query to fail, 
-                        // query OIDs one by one as a workaround
-                        node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
-                        node.snmpGetIndividualOids(host, community, oids, msg);
-                    }
-                    else if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.TooBig)) {
-                        // SNMP tooBig -- too many OIDs for a single request
-                        // Request must be broken into several bulked requests.
-                        // Set an initial bulk size, then let tuneSnmpBlockSize() 
-                        // handle further adjustments.
-                        let blockSize = oids.length - node.blockTuningSteps - (oids.length % node.blockTuningSteps);
-                        node.warn(`SNMP tooBig error, divide into multiple requests for blocks of OIDS, first attempt: ${blockSize} OIDs`);
-                        node.tuneSnmpBlockSize(host, community, oids, msg, blockSize);
+            let blockSize = 0;
+            if (node.getBlockSize !== undefined) {
+                blockSize = node.getBlockSize;
+                console.debug(`Getting OIDs in blocks of ${blockSize}`);
+                // For testing, remove always-failing (in simulator) oid from list.
+                // let simFailingOidIndex = oids.indexOf("1.3.6.1.4.1.534.1.9.7.0.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2")
+                // if (simFailingOidIndex != -1) {
+                //     oids.splice(simFailingOidIndex, 1);
+                // }
+            }
+            else {
+                blockSize = oids.length;
+                console.debug("Getting all OIDs in a single request");
+            }
+
+            msg.varbinds = Array();
+
+            for (let blockStart = 0; blockStart < oids.length; blockStart=blockStart+blockSize) { 
+                let oidBlock = oids.slice(blockStart, blockStart+blockSize);
+                getSession(host, community, node.version, node.timeout).get(oidBlock, function (error, blockVarbinds) {
+                    if (error) {
+                        // error object has .name, .message and, optionally, .status
+                        // error.status is only set for RequestFailed, so check
+                        // that it's this error before checking the value of .status
+                        if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
+                            // SNMPv1 NoSuchName
+                            // A single "missing" OID causes an SNMPv1 query to fail, 
+                            // query OIDs one by one as a workaround
+                            node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
+                            node.snmpGetIndividualOids(host, community, oids, msg);
+                        }
+                        else if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.TooBig)) {
+                            // SNMP tooBig -- too many OIDs for a single request
+                            // The request must be broken into several smaller requests.
+                            // Set an initial bulk size, then let tuneSnmpBlockSize() 
+                            // handle further adjustments.
+                            let blockSize = oids.length - node.blockTuningSteps - (oids.length % node.blockTuningSteps);
+                            node.warn(`SNMP tooBig error, divide into multiple requests for blocks of OIDS, first attempt: ${blockSize} OIDs`);
+                            node.tuneSnmpBlockSize(host, community, oids, msg, blockSize);
+                        }
+                        else {
+                            node.error("Request error: " + error.toString(), msg);
+                        }
                     }
                     else {
-                        node.error("Request error: " + error.toString(), msg);
+                        // add results for this block to msg.varbinds
+                        msg.varbinds.push(... blockVarbinds);
+
+                        // if all varbinds have been returned, process
+                        if (msg.varbinds.length === oids.length) {
+                            if (blockSize != oids.length) {
+                                console.debug("Got results for all OID block queries, processing");
+                            }
+                            node.processVarbinds(msg, msg.varbinds);
+                        }
                     }
-                }
-                else {
-                    node.processVarbinds(msg, varbinds);
-                }
-            });
+                });
+            }
         }
 
         this.on("input", function (msg) {
