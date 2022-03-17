@@ -256,6 +256,7 @@ module.exports = function (RED) {
 
     function GapitSnmpNode(config) {
         RED.nodes.createNode(this, config);
+        this.blockTuningSteps = 10;
         this.config = config;
         this.multi_device_separator = ";";
         this.version = (config.version === "2c") ? snmp.Version2c : snmp.Version1;
@@ -624,6 +625,33 @@ module.exports = function (RED) {
             }
         }
 
+        this.tuneSnmpBlockSize = function (host, community, oids, msg, blockSize) {
+            getSession(host, community, node.version, node.timeout).get(oids.slice(0, blockSize), function (error, varbinds) {
+                if (error) {
+                    // error object has .name, .message and, optionally, .status
+                    // error.status is only set for RequestFailed, so check
+                    // that it's this error before checking the value of .status
+                    if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.TooBig)) {
+                        // Adjust blockSize down one level, try again.
+                        blockSize = blockSize - node.blockTuningSteps;
+                        node.warn(`Still tooBig, trying again with ${blockSize} OIDs`);
+                        node.tuneSnmpBlockSize(host, community, oids, msg, blockSize);
+                    }
+                    else {
+                        node.error("Request error: " + error.toString(), msg);
+                    }
+                }
+                else {
+                    console.info(`Found working block size to work around SNMP tooBig error: ${blockSize} OIDs`);
+                    // For testing, remove always-failing (in simulator) oid from list.
+                    // oids.splice(oids.indexOf("1.3.6.1.4.1.534.1.9.7.0"), 1);
+                    // 
+                    // node.snmpGetByBlock(host, community, oids, msg, blockSize);
+                    // node.getBlockSize = blockSize;
+                }
+            });
+        }
+
         this.snmpGet = function (host, community, oids, msg) {
             getSession(host, community, node.version, node.timeout).get(oids, function (error, varbinds) {
                 if (error) {
@@ -636,6 +664,15 @@ module.exports = function (RED) {
                         // query OIDs one by one as a workaround
                         node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
                         node.snmpGetIndividualOids(host, community, oids, msg);
+                    }
+                    else if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.TooBig)) {
+                        // SNMP tooBig -- too many OIDs for a single request
+                        // Request must be broken into several bulked requests.
+                        // Set an initial bulk size, then let tuneSnmpBlockSize() 
+                        // handle further adjustments.
+                        let blockSize = oids.length - node.blockTuningSteps - (oids.length % node.blockTuningSteps);
+                        node.warn(`SNMP tooBig error, divide into multiple requests for blocks of OIDS, first attempt: ${blockSize} OIDs`);
+                        node.tuneSnmpBlockSize(host, community, oids, msg, blockSize);
                     }
                     else {
                         node.error("Request error: " + error.toString(), msg);
