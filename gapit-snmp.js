@@ -630,7 +630,7 @@ module.exports = function (RED) {
                     // error object has .name, .message and, optionally, .status
                     // error.status is only set for RequestFailed, so check
                     // that it's this error before checking the value of .status
-                    if((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
+                    if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
                         // SNMPv1 NoSuchName
                         // A single "missing" OID causes an SNMPv1 query to fail, 
                         // query OIDs one by one as a workaround
