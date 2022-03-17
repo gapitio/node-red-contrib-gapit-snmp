@@ -588,42 +588,6 @@ module.exports = function (RED) {
             return oids;
         }
 
-        this.snmpGetIndividualOids = function (host, community, oids, msg) {
-            // Query OIDs individually
-            // Workaround for SNMPv1 queries failing if one or more OIDS
-            // don't exist.
-
-            msg.v1QueryCount = oids.length;
-            msg.v1ResponseCount = 0;
-            msg.v1Varbinds = Array();
-            for (const oid of oids) {
-                console.debug(`SNMPv1 single-OID query for '${oid}'`);
-                getSession(host, community, node.version, node.timeout).get([oid], function (singleQueryError, singleQueryVarbinds) {
-                    msg.v1ResponseCount += 1;
-                    console.debug(`Got SNMPv1 single-OID response #${msg.v1ResponseCount} of ${msg.v1QueryCount}`);
-                    if (singleQueryError) {
-                        if((singleQueryError.name == "RequestFailedError") && (singleQueryError.status == snmp.ErrorStatus.NoSuchName)) {
-                            node.warn(`SNMPv1 single-OID query: OID '${oid}' is not present`);
-                            node.addNonExistentOid(oid);
-                        }
-                        else {
-                            node.error(`SNMPv1 single-OID request error: ${singleQueryError.toString()}`);
-                        }
-                    }
-                    else {
-                        console.debug(`Got result for SNMPv1 single-OID query for OID '${oid}'`);
-                        msg.v1Varbinds.push(singleQueryVarbinds[0]);
-                    }
-                    if (msg.v1ResponseCount === msg.v1QueryCount) {
-                        console.debug("Got responses for all SNMPv1 single-OID queries, processing results");
-                        node.processVarbinds(msg, msg.v1Varbinds);
-                    }
-                });
-
-                node.persistNonExistentOids();
-            }
-        }
-
         this.tuneSnmpBlockSize = function (host, community, oids, msg, blockSize) {
             getSession(host, community, node.version, node.timeout).get(oids.slice(0, blockSize), function (error, varbinds) {
                 if (error) {
@@ -644,7 +608,8 @@ module.exports = function (RED) {
                         // A single "missing" OID causes an SNMPv1 query to fail, 
                         // query OIDs one by one as a workaround
                         node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
-                        node.snmpGetIndividualOids(host, community, oids, msg);
+                        node.getBlockSize = 1;
+                        node.snmpGet(host, community, oids, msg);
                     }
                     else {
                         node.error("Request error: " + error.toString(), msg);
@@ -675,20 +640,29 @@ module.exports = function (RED) {
             }
 
             msg.varbinds = Array();
+            msg.totalBlockResponseCount = 0;
 
             for (let blockStart = 0; blockStart < oids.length; blockStart=blockStart+blockSize) { 
                 let oidBlock = oids.slice(blockStart, blockStart+blockSize);
                 getSession(host, community, node.version, node.timeout).get(oidBlock, function (error, blockVarbinds) {
+                    msg.totalBlockResponseCount += oidBlock.length;
                     if (error) {
                         // error object has .name, .message and, optionally, .status
                         // error.status is only set for RequestFailed, so check
                         // that it's this error before checking the value of .status
                         if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.NoSuchName)) {
                             // SNMPv1 NoSuchName
-                            // A single "missing" OID causes an SNMPv1 query to fail, 
-                            // query OIDs one by one as a workaround
-                            node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
-                            node.snmpGetIndividualOids(host, community, oids, msg);
+                            if (blockSize > 1) {
+                                // A single "missing" OID causes an SNMPv1 query to fail, 
+                                // query OIDs one by one as a workaround
+                                node.warn("SNMPv1 NoSuchName, will query all OIDs individually");
+                                node.getBlockSize = 1;
+                                node.snmpGet(host, community, oids, msg);
+                            }
+                            else {
+                                node.warn(`SNMPv1 single-OID query: OID '${oidBlock[0]}' is not present`);
+                                node.addNonExistentOid(oidBlock[0]);
+                            }
                         }
                         else if ((error.name == "RequestFailedError") && (error.status == snmp.ErrorStatus.TooBig)) {
                             // SNMP tooBig -- too many OIDs for a single request
@@ -706,14 +680,19 @@ module.exports = function (RED) {
                     else {
                         // add results for this block to msg.varbinds
                         msg.varbinds.push(... blockVarbinds);
+                    }
 
-                        // if all varbinds have been returned, process
-                        if (msg.varbinds.length === oids.length) {
-                            if (blockSize != oids.length) {
-                                console.debug("Got results for all OID block queries, processing");
+                    // if all queries have returned, and at least one had data, process
+                    if (msg.totalBlockResponseCount === oids.length && msg.varbinds.length > 0) {
+                        if (blockSize != oids.length) {
+                            console.debug("Got results for all OID block queries, processing");
+                            // clear 1-block if set (SNMPv1 NoSuchName)
+                            if (node.getBlockSize !== undefined && node.getBlockSize == 1) {
+                                console.debug("Clearing get block size of 1, assumed set for SNMPv1 NoSuchName");
+                                delete(node.getBlockSize);
                             }
-                            node.processVarbinds(msg, msg.varbinds);
                         }
+                        node.processVarbinds(msg, msg.varbinds);
                     }
                 });
             }
