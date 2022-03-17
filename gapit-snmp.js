@@ -662,7 +662,7 @@ module.exports = function (RED) {
             let blockSize = 0;
             if (node.getBlockSize !== undefined) {
                 blockSize = node.getBlockSize;
-                console.debug(`Getting OIDs in blocks of ${blockSize}`);
+                console.debug(`Querying OIDs in blocks of ${blockSize}, total number of OIDs is ${oids.length}`);
                 // For testing, remove always-failing (in simulator) oid from list.
                 // let simFailingOidIndex = oids.indexOf("1.3.6.1.4.1.534.1.9.7.0.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2")
                 // if (simFailingOidIndex != -1) {
@@ -671,7 +671,7 @@ module.exports = function (RED) {
             }
             else {
                 blockSize = oids.length;
-                console.debug("Getting all OIDs in a single request");
+                console.debug("Querying all OIDs in a single request");
             }
 
             msg.varbinds = Array();
