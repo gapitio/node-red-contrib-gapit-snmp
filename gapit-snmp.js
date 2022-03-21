@@ -724,5 +724,11 @@ module.exports = function (RED) {
             }
         });
     }
-    RED.nodes.registerType("gapit-snmp", GapitSnmpNode);
+    RED.nodes.registerType("gapit-snmp", GapitSnmpNode, {
+        credentials: {
+            username: {type:"text"},
+            auth_key: {type:"password"},
+            priv_key: {type:"password"}
+        }
+    });
 };

@@ -140,6 +140,11 @@
     RED.nodes.registerType('gapit-snmp', {
         category: 'network-input',
         color: "YellowGreen",
+        credentials: {
+            username: {type:"text"},
+            auth_key: {type:"password"},
+            priv_key: {type:"password"}
+        },
         defaults: {
             host: { value: "127.0.0.1" },
             community: { value: "public" },
