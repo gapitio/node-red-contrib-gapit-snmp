@@ -4,17 +4,58 @@
         <input type="text" id="node-input-host" placeholder="ip address(:optional port)">
     </div>
     <div class="form-row">
-        <label for="node-input-community"><i class="fa fa-user"></i> Community</label>
-        <input type="text" id="node-input-community" placeholder="public">
-    </div>
-    <div class="form-row">
         <label for="node-input-version"><i class="fa fa-bookmark"></i> Version</label>
         <select type="text" id="node-input-version" style="width:150px;">
             <option value="1">v1</option>
             <option value="2c">v2c</option>
+            <option value="3">v3</option>
         </select>
         <span style="margin-left:50px;">Timeout</span>
         <input type="text" id="node-input-timeout" placeholder="secs" style="width:50px; direction:rtl; vertical-align:baseline;">&nbsp;S
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v1 snmpoptions_v2c">
+        <label for="node-input-community"><i class="fa fa-user"></i> Community</label>
+        <input type="text" id="node-input-community" placeholder="public">
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3">
+        <label for="node-input-context"><i class="fa fa-filter"></i> Context</label>
+        <input type="text" id="node-input-context" placeholder="SNMPv3 context - can be empty">
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3">
+        <label for="node-input-username"><i class="fa fa-user"></i> Username</label>
+        <input type="text" id="node-input-username" placeholder="SNMPv3 username">
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3">
+        <label for="node-input-security-level"><i class="fa fa-shield"></i> Security level</label>
+        <select type="text" id="node-input-security-level">
+            <option value="authPriv">authPriv</option>
+            <option value="authNoPriv">authNoPriv</option>
+            <option value="noAuthNoPriv">noAuthNoPriv</option>
+        </select>
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3 snmpoptions_v3_sec snmpoptions_v3_sec_authNoPriv snmpoptions_v3_sec_authPriv">
+        <label for="node-input-auth-protocol"><i class="fa fa-shield"></i> Auth Procol</label>
+        <select type="text" id="node-input-auth-protocol">
+            <option value="md5">MD5</option>
+            <option value="sha" selected>SHA</option>
+        </select>
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3 snmpoptions_v3_sec snmpoptions_v3_sec_authNoPriv snmpoptions_v3_sec_authPriv">
+        <label for="node-input-auth-key"><i class="fa fa-user-secret"></i> Auth Key</label>
+        <input type="password" id="node-input-auth-key" placeholder="SNMPv3 auth key">
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3 snmpoptions_v3_sec snmpoptions_v3_sec_authPriv">
+        <label for="node-input-priv-protocol"><i class="fa fa-shield"></i> Privacy Protocol</label>
+        <select type="text" id="node-input-priv-protocol">
+            <option value="des">DES</option>
+            <option value="aes">AES-128</option>
+            <option value="aes256r">AES-256 ("Reeder" key localization)</option>
+            <option value="aes256b">AES-256 ("Blumenthal" key localization)</option>
+        </select>
+    </div>
+    <div class="form-row snmpoptions snmpoptions_v3 snmpoptions_v3_sec snmpoptions_v3_sec_authPriv">
+        <label for="node-input-priv-key"><i class="fa fa-user-secret"></i> Privacy Key</label>
+        <input type="password" id="node-input-priv-key" placeholder="SNMPv3 priv key">
     </div>
     <div class="form-row">
         <label for="node-input-tagvalue_device_name"><i class="fa fa-file-code-o"></i> Device name</label>
@@ -125,6 +166,7 @@
             return this.name ? "node_label_italic" : "";
         },
         oneditprepare: function () {
+            // field customization
             $("#node-input-custom_tags").typedInput({
                 type:"json",
                 types:["json"]
@@ -144,6 +186,28 @@
                     }
                 ]
             });
+
+            ///// dynamic UI
+            //
+            // hide fields based on SNMP version
+            $("#node-input-version").on("change", function() {
+                let version = $("#node-input-version").val();
+                let optionsClass = `.snmpoptions_v${version}`;
+                console.log()
+                $(".snmpoptions").hide();
+                $(optionsClass).show();
+
+            });
+
+            // hide fields based on SNMP security level
+            $("#node-input-security-level").on("change", function() {
+                let securityLevel = $("#node-input-security-level").val();
+                let levelClass = `.snmpoptions_v3_sec_${securityLevel}`;
+                console.log()
+                $(".snmpoptions_v3_sec").hide();
+                $(levelClass).show();
+            });
+            
         },
     });
 </script>
