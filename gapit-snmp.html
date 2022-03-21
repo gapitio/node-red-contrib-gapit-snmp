@@ -209,8 +209,8 @@
             });
 
             // hide fields based on SNMP security level
-            $("#node-input-security-level").on("change", function() {
-                let securityLevel = $("#node-input-security-level").val();
+            $("#node-input-security_level").on("change", function() {
+                let securityLevel = $("#node-input-security_level").val();
                 let levelClass = `.snmpoptions_v3_sec_${securityLevel}`;
                 console.log()
                 $(".snmpoptions_v3_sec").hide();
