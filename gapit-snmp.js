@@ -5,20 +5,6 @@ module.exports = function (RED) {
 
     var sessions = {};
 
-    function getSession(host, community, version, timeout) {
-        var sessionKey = host + ":" + community + ":" + version;
-        var port = 161;
-        if (host.indexOf(":") !== -1) {
-            port = host.split(":")[1];
-            host = host.split(":")[0];
-        }
-        if (!(sessionKey in sessions)) {
-            sessions[sessionKey] = snmp.createSession(host, community, { port:port, version:version, timeout:(timeout || 5000) });
-        }
-        return sessions[sessionKey];
-    }
-
-
     function varbindsParseCounter64Buffers(varbinds, convertToNumbers=true) {
         // Counter64 is not directly supported by net-snmp, 
         // but returned as a buffer (array). This function 
@@ -345,6 +331,20 @@ module.exports = function (RED) {
         console.info("initializing nonexistent_oids in context (set to empty Array)")
         nodeContext.set("nonexistent_oids", Array());
 
+        this.getSession = function () {
+            let host = node.config.host;
+            var sessionKey = host + ":" + node.config.community + ":" + node.version;
+            var port = 161;
+            if (host.indexOf(":") !== -1) {
+                port = host.split(":")[1];
+                host = host.split(":")[0];
+            }
+            if (!(sessionKey in sessions)) {
+                sessions[sessionKey] = snmp.createSession(host, node.config.community, { port:port, version:node.version, timeout:(node.timeout || 5000) });
+            }
+            return sessions[sessionKey];
+        }
+
         this.processVarbinds = function (msg, varbinds) {
             // parse Counter64 values in varbinds
             varbindsParseCounter64Buffers(varbinds, node.config.convert_counter64_bigint_to_number);
@@ -589,7 +589,7 @@ module.exports = function (RED) {
         }
 
         this.tuneSnmpBlockSize = function (host, community, oids, msg, blockSize) {
-            getSession(host, community, node.version, node.timeout).get(oids.slice(0, blockSize), function (error, varbinds) {
+            node.getSession().get(oids.slice(0, blockSize), function (error, varbinds) {
                 if (error) {
                     // error object has .name, .message and, optionally, .status
                     // error.status is only set for RequestFailed, so check
@@ -644,7 +644,7 @@ module.exports = function (RED) {
 
             for (let blockStart = 0; blockStart < oids.length; blockStart=blockStart+blockSize) { 
                 let oidBlock = oids.slice(blockStart, blockStart+blockSize);
-                getSession(host, community, node.version, node.timeout).get(oidBlock, function (error, blockVarbinds) {
+                node.getSession().get(oidBlock, function (error, blockVarbinds) {
                     msg.totalBlockResponseCount += oidBlock.length;
                     if (error) {
                         // error object has .name, .message and, optionally, .status
