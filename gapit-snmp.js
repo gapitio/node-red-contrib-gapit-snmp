@@ -259,7 +259,7 @@ module.exports = function (RED) {
         this.blockTuningSteps = 10;
         this.config = config;
         this.multi_device_separator = ";";
-        this.version = (config.version === "2c") ? snmp.Version2c : snmp.Version1;
+        this.version = snmp.Version[config.version];
         this.tagname_device_name = config.tagname_device_name.trim();
         this.tagvalue_device_name = config.tagvalue_device_name.trim();
         // split device_name from config into an array
