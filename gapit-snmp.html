@@ -37,7 +37,7 @@
         <label for="node-input-auth_protocol"><i class="fa fa-shield"></i> Auth Procol</label>
         <select type="text" id="node-input-auth_protocol">
             <option value="md5">MD5</option>
-            <option value="sha" selected>SHA</option>
+            <option value="sha">SHA</option>
         </select>
     </div>
     <div class="form-row snmpoptions snmpoptions_v3 snmpoptions_v3_sec snmpoptions_v3_sec_authNoPriv snmpoptions_v3_sec_authPriv">
@@ -202,17 +202,14 @@
             $("#node-input-version").on("change", function() {
                 let version = $("#node-input-version").val();
                 let optionsClass = `.snmpoptions_v${version}`;
-                console.log()
                 $(".snmpoptions").hide();
                 $(optionsClass).show();
-
             });
 
             // hide fields based on SNMP security level
             $("#node-input-security_level").on("change", function() {
                 let securityLevel = $("#node-input-security_level").val();
                 let levelClass = `.snmpoptions_v3_sec_${securityLevel}`;
-                console.log()
                 $(".snmpoptions_v3_sec").hide();
                 $(levelClass).show();
             });
