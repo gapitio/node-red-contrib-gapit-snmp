@@ -333,16 +333,47 @@ module.exports = function (RED) {
 
         this.getSession = function () {
             let host = node.config.host;
-            var sessionKey = host + ":" + node.config.community + ":" + node.version;
+            let communityOrUsername = (node.version === snmp.Version3) ? node.credentials.username : node.config.community;
+            var sessionKey = host + ":" + communityOrUsername + ":" + node.version;
             var port = 161;
             if (host.indexOf(":") !== -1) {
                 port = host.split(":")[1];
                 host = host.split(":")[0];
             }
             if (!(sessionKey in sessions)) {
-                sessions[sessionKey] = snmp.createSession(host, node.config.community, { port:port, version:node.version, timeout:(node.timeout || 5000) });
+                console.info(`creating session for ${sessionKey}`);
+                let options = { port:port, version:node.version, timeout:(node.timeout || 5000) }
+                if (node.version === snmp.Version3) {
+                    if (node.config.context.trim() != "") {
+                        options.context = node.config.context.trim();
+                    }
+                    let user = node.createV3UserObject();
+                    sessions[sessionKey] = snmp.createV3Session(host, user, options);
+                }
+                else {
+                    sessions[sessionKey] = snmp.createSession(host, node.config.community, options);
+                }
             }
             return sessions[sessionKey];
+        }
+
+        this.createV3UserObject = function() {
+            // set up user object for SNMPv3
+            // empty object if other version
+            let user = {}
+            if (node.version == snmp.Version3) {
+                user.name = node.credentials.username;
+                user.level = snmp.SecurityLevel[node.config.security_level];
+                if (user.level == snmp.SecurityLevel.authNoPriv || user.level == snmp.SecurityLevel.authPriv) {
+                    user.authProtocol = snmp.AuthProtocols[node.config.auth_protocol];
+                    user.authKey = node.credentials.auth_key;
+                }
+                if (user.level == snmp.SecurityLevel.authPriv) {
+                    user.privProtocol = snmp.PrivProtocols[node.config.priv_protocol];
+                    user.privKey = node.credentials.priv_key;
+                }
+            }
+            return user;
         }
 
         this.processVarbinds = function (msg, varbinds) {
