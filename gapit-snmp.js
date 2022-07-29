@@ -2,6 +2,7 @@
 module.exports = function (RED) {
     "use strict";
     var snmp = require("net-snmp");
+    var crypto = require("crypto");
 
     var sessions = {};
 
@@ -332,28 +333,47 @@ module.exports = function (RED) {
         nodeContext.set("nonexistent_oids", Array());
 
         this.getSession = function () {
+            // check if session already exists, return if it does
+            if (node.sessionKey !== undefined && node.sessionKey in sessions) {
+                console.debug(`Found existing session for ${node.sessionKey}`);
+                return sessions[node.sessionKey];
+            }
+
             let host = node.config.host;
-            let communityOrUsername = (node.version === snmp.Version3) ? node.credentials.username : node.config.community;
-            var sessionKey = host + ":" + communityOrUsername + ":" + node.version;
+            let sessionKey;
+            if (node.version === snmp.Version3) {
+                // include (a hash of) all v3 options to create a unique session key
+                let v3OptionsHash = crypto.createHash('sha256').update(
+                    node.config.security_level + 
+                    node.config.auth_protocol + 
+                    node.credentials.auth_key + 
+                    node.config.priv_protocol + 
+                    node.credentials.priv_key).digest('hex').slice(-8)
+                sessionKey = host + ":" + node.credentials.username + ":" + node.version + ":" + v3OptionsHash;
+            }
+            else { // not SNMPv3
+                sessionKey = host + ":" + node.config.community + ":" + node.version;
+            }
             var port = 161;
             if (host.indexOf(":") !== -1) {
                 port = host.split(":")[1];
                 host = host.split(":")[0];
             }
-            if (!(sessionKey in sessions)) {
-                console.info(`creating session for ${sessionKey}`);
-                let options = { port:port, version:node.version, timeout:(node.timeout || 5000) }
-                if (node.version === snmp.Version3) {
-                    if (node.config.context.trim() != "") {
-                        options.context = node.config.context.trim();
-                    }
-                    let user = node.createV3UserObject();
-                    sessions[sessionKey] = snmp.createV3Session(host, user, options);
+
+            console.info(`Creating session for ${sessionKey}`);
+            let options = { port:port, version:node.version, timeout:(node.timeout || 5000) }
+            if (node.version === snmp.Version3) {
+                if (node.config.context.trim() != "") {
+                    options.context = node.config.context.trim();
                 }
-                else {
-                    sessions[sessionKey] = snmp.createSession(host, node.config.community, options);
-                }
+                let user = node.createV3UserObject();
+                sessions[sessionKey] = snmp.createV3Session(host, user, options);
             }
+            else {
+                sessions[sessionKey] = snmp.createSession(host, node.config.community, options);
+            }
+
+            node.sessionKey = sessionKey;
             return sessions[sessionKey];
         }
 
