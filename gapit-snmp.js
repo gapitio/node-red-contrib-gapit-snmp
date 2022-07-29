@@ -373,6 +373,11 @@ module.exports = function (RED) {
                 sessions[sessionKey] = snmp.createSession(host, node.config.community, options);
             }
 
+            sessions[sessionKey].on("error", function (error) {
+                console.log ("Session error: " + error.toString());
+                node.closeSession();
+            })
+
             node.sessionKey = sessionKey;
             return sessions[sessionKey];
         }
