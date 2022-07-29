@@ -396,6 +396,14 @@ module.exports = function (RED) {
             return user;
         }
 
+        this.closeSession = function () {
+            if (node.sessionKey !== undefined && node.sessionKey in sessions) {
+                console.debug(`Closing session ${node.sessionKey}`);
+                sessions[node.sessionKey].close();
+                delete sessions[node.sessionKey];
+            }
+        }
+
         this.processVarbinds = function (msg, varbinds) {
             // parse Counter64 values in varbinds
             varbindsParseCounter64Buffers(varbinds, node.config.convert_counter64_bigint_to_number);
@@ -773,6 +781,10 @@ module.exports = function (RED) {
             else {
                 node.warn("No oid(s) to search for");
             }
+        });
+
+        this.on("close", function() {
+            node.closeSession();
         });
     }
     RED.nodes.registerType("gapit-snmp", GapitSnmpNode, {
