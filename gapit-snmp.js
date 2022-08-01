@@ -2,22 +2,9 @@
 module.exports = function (RED) {
     "use strict";
     var snmp = require("net-snmp");
+    var crypto = require("crypto");
 
     var sessions = {};
-
-    function getSession(host, community, version, timeout) {
-        var sessionKey = host + ":" + community + ":" + version;
-        var port = 161;
-        if (host.indexOf(":") !== -1) {
-            port = host.split(":")[1];
-            host = host.split(":")[0];
-        }
-        if (!(sessionKey in sessions)) {
-            sessions[sessionKey] = snmp.createSession(host, community, { port:port, version:version, timeout:(timeout || 5000) });
-        }
-        return sessions[sessionKey];
-    }
-
 
     function varbindsParseCounter64Buffers(varbinds, convertToNumbers=true) {
         // Counter64 is not directly supported by net-snmp, 
@@ -259,7 +246,7 @@ module.exports = function (RED) {
         this.blockTuningSteps = 10;
         this.config = config;
         this.multi_device_separator = ";";
-        this.version = (config.version === "2c") ? snmp.Version2c : snmp.Version1;
+        this.version = snmp.Version[config.version];
         this.tagname_device_name = config.tagname_device_name.trim();
         this.tagvalue_device_name = config.tagvalue_device_name.trim();
         // split device_name from config into an array
@@ -344,6 +331,83 @@ module.exports = function (RED) {
         // initialize nonexistent_oids in context
         console.info("initializing nonexistent_oids in context (set to empty Array)")
         nodeContext.set("nonexistent_oids", Array());
+
+        this.getSession = function () {
+            // check if session already exists, return if it does
+            if (node.sessionKey !== undefined && node.sessionKey in sessions) {
+                console.debug(`Found existing session for ${node.sessionKey}`);
+                return sessions[node.sessionKey];
+            }
+
+            let host = node.config.host;
+            let sessionKey;
+            if (node.version === snmp.Version3) {
+                // include (a hash of) all v3 options to create a unique session key
+                let v3OptionsHash = crypto.createHash('sha256').update(
+                    node.config.security_level + 
+                    node.config.auth_protocol + 
+                    node.credentials.auth_key + 
+                    node.config.priv_protocol + 
+                    node.credentials.priv_key).digest('hex').slice(-8)
+                sessionKey = host + ":" + node.credentials.username + ":" + node.version + ":" + v3OptionsHash;
+            }
+            else { // not SNMPv3
+                sessionKey = host + ":" + node.config.community + ":" + node.version;
+            }
+            var port = 161;
+            if (host.indexOf(":") !== -1) {
+                port = host.split(":")[1];
+                host = host.split(":")[0];
+            }
+
+            console.info(`Creating session for ${sessionKey}`);
+            let options = { port:port, version:node.version, timeout:(node.timeout || 5000) }
+            if (node.version === snmp.Version3) {
+                if (node.config.context.trim() != "") {
+                    options.context = node.config.context.trim();
+                }
+                let user = node.createV3UserObject();
+                sessions[sessionKey] = snmp.createV3Session(host, user, options);
+            }
+            else {
+                sessions[sessionKey] = snmp.createSession(host, node.config.community, options);
+            }
+
+            sessions[sessionKey].on("error", function (error) {
+                console.log ("Session error: " + error.toString());
+                node.closeSession();
+            })
+
+            node.sessionKey = sessionKey;
+            return sessions[sessionKey];
+        }
+
+        this.createV3UserObject = function() {
+            // set up user object for SNMPv3
+            // empty object if other version
+            let user = {}
+            if (node.version == snmp.Version3) {
+                user.name = node.credentials.username;
+                user.level = snmp.SecurityLevel[node.config.security_level];
+                if (user.level == snmp.SecurityLevel.authNoPriv || user.level == snmp.SecurityLevel.authPriv) {
+                    user.authProtocol = snmp.AuthProtocols[node.config.auth_protocol];
+                    user.authKey = node.credentials.auth_key;
+                }
+                if (user.level == snmp.SecurityLevel.authPriv) {
+                    user.privProtocol = snmp.PrivProtocols[node.config.priv_protocol];
+                    user.privKey = node.credentials.priv_key;
+                }
+            }
+            return user;
+        }
+
+        this.closeSession = function () {
+            if (node.sessionKey !== undefined && node.sessionKey in sessions) {
+                console.debug(`Closing session ${node.sessionKey}`);
+                sessions[node.sessionKey].close();
+                delete sessions[node.sessionKey];
+            }
+        }
 
         this.processVarbinds = function (msg, varbinds) {
             // parse Counter64 values in varbinds
@@ -589,7 +653,7 @@ module.exports = function (RED) {
         }
 
         this.tuneSnmpBlockSize = function (host, community, oids, msg, blockSize) {
-            getSession(host, community, node.version, node.timeout).get(oids.slice(0, blockSize), function (error, varbinds) {
+            node.getSession().get(oids.slice(0, blockSize), function (error, varbinds) {
                 if (error) {
                     // error object has .name, .message and, optionally, .status
                     // error.status is only set for RequestFailed, so check
@@ -644,7 +708,7 @@ module.exports = function (RED) {
 
             for (let blockStart = 0; blockStart < oids.length; blockStart=blockStart+blockSize) { 
                 let oidBlock = oids.slice(blockStart, blockStart+blockSize);
-                getSession(host, community, node.version, node.timeout).get(oidBlock, function (error, blockVarbinds) {
+                node.getSession().get(oidBlock, function (error, blockVarbinds) {
                     msg.totalBlockResponseCount += oidBlock.length;
                     if (error) {
                         // error object has .name, .message and, optionally, .status
@@ -723,6 +787,16 @@ module.exports = function (RED) {
                 node.warn("No oid(s) to search for");
             }
         });
+
+        this.on("close", function() {
+            node.closeSession();
+        });
     }
-    RED.nodes.registerType("gapit-snmp", GapitSnmpNode);
+    RED.nodes.registerType("gapit-snmp", GapitSnmpNode, {
+        credentials: {
+            username: {type:"text"},
+            auth_key: {type:"password"},
+            priv_key: {type:"password"}
+        }
+    });
 };
