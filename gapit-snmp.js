@@ -634,7 +634,6 @@ module.exports = function (RED) {
                     console.info("Getting OIDs from group '" + group_name + "'");
                     for (var member_idx = 0; member_idx < groups[group_idx]["group"].length; member_idx++) { 
                         var oid = groups[group_idx]["group"][member_idx]["address"];
-                        console.info("Found OID " + oid + " for '" + groups[group_idx]["group"][member_idx]["description"] + "'");
                         if (node.isNonExistentOid(oid)) {
                             // oid does not exist, skip
                             continue;
