@@ -1,4 +1,4 @@
-# node-red-contrib-gabit-snmp
+# node-red-contrib-gapit-snmp
 
 The *gapit-snmp* <a href="http://nodered.org" target="_new">Node-RED</a> 
 node queries all the OIDs listed in a *Gapit code* JSON structure using 
