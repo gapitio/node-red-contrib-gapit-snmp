@@ -218,8 +218,8 @@
             // Doesn't seem to work when called immediately, 
             // so use a timer (even 1 msec seems to work).
             setTimeout(function() {
-                $("#node-input-version").triggerHandler("change");
                 $("#node-input-security_level").triggerHandler("change");
+                $("#node-input-version").triggerHandler("change");
             }, 1);
         },
     });
