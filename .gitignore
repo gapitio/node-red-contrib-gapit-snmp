@@ -1,0 +1,5 @@
+node_modules/
+
+# gapit codes
+gapit-[0-9][0-9]-[0-9][0-9].json
+
